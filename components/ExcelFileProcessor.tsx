@@ -284,7 +284,9 @@ export default function ExcelFileProcessor() {
       console.log('📊 [EXCEL_PROCESSOR] Stato finale store:');
       console.log('   - Documenti nello store:', finalState.documents.length);
       console.log('   - Righe nello store:', finalState.documentRows.length);
-      console.log('   - Summaries calcolati:', Object.keys(finalState.summaries || {}).length);
+      console.log('   - Entry summaries:', finalState.entrySummaries?.length || 0);
+      console.log('   - Exit summaries:', finalState.exitSummaries?.length || 0);
+      console.log('   - Storage summaries:', finalState.storageSummaries?.length || 0);
       
       // Mostra errori di validazione dopo che tutto è completato
       if (parseResult.validationErrors && parseResult.validationErrors.length > 0) {
@@ -298,15 +300,15 @@ export default function ExcelFileProcessor() {
       setUploadProgress(0.95);
       setProgressMessage('Finalizzazione...');
       
-      // Verifica i risultati dopo il calcolo
-      const finalState = useWarehouseStore.getState();
+      // Verifica i risultati dopo il calcolo (riutilizza finalState già dichiarato sopra)
+      const finalStateCheck = useWarehouseStore.getState();
       console.log('Risultati calcoli:', {
-        entrySummaries: finalState.entrySummaries.length,
-        exitSummaries: finalState.exitSummaries.length,
-        storageSummaries: finalState.storageSummaries.length,
-        totalEntryCost: finalState.entrySummaries.reduce((sum, e) => sum + e.costo_ingresso, 0),
-        totalExitCost: finalState.exitSummaries.reduce((sum, e) => sum + e.costi_uscita, 0),
-        totalStorageCost: finalState.storageSummaries.reduce((sum, s) => sum + s.costo_storage, 0)
+        entrySummaries: finalStateCheck.entrySummaries?.length || 0,
+        exitSummaries: finalStateCheck.exitSummaries?.length || 0,
+        storageSummaries: finalStateCheck.storageSummaries?.length || 0,
+        totalEntryCost: finalStateCheck.entrySummaries?.reduce((sum, e) => sum + (e.costo_ingresso || 0), 0) || 0,
+        totalExitCost: finalStateCheck.exitSummaries?.reduce((sum, e) => sum + (e.costi_uscita || 0), 0) || 0,
+        totalStorageCost: finalStateCheck.storageSummaries?.reduce((sum, s) => sum + (s.costo_storage || 0), 0) || 0
       });
       
       setUploadProgress(1);
