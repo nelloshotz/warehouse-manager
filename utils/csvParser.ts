@@ -642,16 +642,17 @@ export async function parseCSVFile(
         }
 
         // Crea o recupera il documento
-        let document: Document;
+        let document: Document | undefined;
         if (documentsMap.has(docNum)) {
           document = documentsMap.get(docNum)!;
         } else {
-          document = {
+          const newDocument: Document = {
             id: baseId + globalDocCounter.value++,
             numero_documento: docNum
           };
-          documentsMap.set(docNum, document);
-          result.documents.push(document);
+          documentsMap.set(docNum, newDocument);
+          result.documents.push(newDocument);
+          document = newDocument;
         }
 
         // Estrai i dati della riga
@@ -973,6 +974,17 @@ export async function parseCSVFile(
         }
 
         // Crea la riga del documento
+        // Verifica che document sia definito (dovrebbe sempre essere così, ma per sicurezza)
+        if (!document) {
+          totalSkippedRows++;
+          const motivo = `document non definito per documento ${docNum}`;
+          if (debugLog) {
+            debugLog.skipped.push(`RIGA ${i + 1} - MOTIVO: ${motivo}`);
+          }
+          result.errors.push(`Errore alla riga ${i + 1}: ${motivo}`);
+          continue;
+        }
+        
         const documentRow: DocumentRow = {
           id: baseId + 1000000 + globalRowCounter.value++,
           documento_id: document.id,
