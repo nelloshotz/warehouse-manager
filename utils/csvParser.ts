@@ -1,14 +1,15 @@
 import * as FileSystem from 'expo-file-system';
 import { Document, DocumentRow } from '@/types/warehouse';
 
-// Import Platform in modo sicuro (può non essere disponibile in alcuni contesti)
-let Platform: { OS: string } | null = null;
-try {
-  const RNPlatform = require('react-native');
-  Platform = RNPlatform.Platform || null;
-} catch (e) {
-  // Platform non disponibile (es. in contesti Node.js)
-  Platform = null;
+// Funzione helper per ottenere Platform in modo sicuro
+function getPlatform(): { OS: string } | null {
+  try {
+    const RNPlatform = require('react-native');
+    return RNPlatform.Platform || null;
+  } catch (e) {
+    // Platform non disponibile (es. in contesti Node.js)
+    return null;
+  }
 }
 
 export interface ExcelParseResult {
@@ -289,6 +290,8 @@ export async function parseCSVFile(
   fileUri: string,
   onProgress?: (progress: ParseProgress) => void
 ): Promise<ExcelParseResult> {
+  console.log('🔵 [PARSER] Inizio parsing CSV, fileUri:', fileUri);
+  
   const result: ExcelParseResult = {
     documents: [],
     documentRows: [],
@@ -444,6 +447,7 @@ export async function parseCSVFile(
 
     // Processa le righe (escludi header, inizia da riga 2)
     const totalRows = lines.length - 1;
+    console.log(`🔵 [PARSER] Inizio elaborazione ${totalRows} righe CSV`);
     
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
@@ -452,6 +456,11 @@ export async function parseCSVFile(
           debugLog.skipped.push(`RIGA ${i + 1} - MOTIVO: riga vuota o non valida`);
         }
         continue;
+      }
+
+      // Log ogni 1000 righe per monitorare il progresso
+      if (i % 1000 === 0) {
+        console.log(`🔵 [PARSER] Elaborate ${i}/${totalRows} righe... (documenti: ${result.documents.length}, righe: ${result.documentRows.length})`);
       }
 
       try {
@@ -848,6 +857,17 @@ export async function parseCSVFile(
       } catch (error) {
         totalSkippedRows++;
         const motivo = `errore durante il parsing: ${error instanceof Error ? error.message : String(error)}`;
+        const errorStack = error instanceof Error ? error.stack : 'N/A';
+        
+        console.error(`❌ [PARSER] Errore riga ${i + 1}:`, motivo);
+        console.error(`❌ [PARSER] Stack trace:`, errorStack);
+        console.error(`❌ [PARSER] Dettagli riga:`, {
+          riga: i + 1,
+          docNum: row[docNumIndex] || 'N/A',
+          dataIngresso: row[dataIngressoIndex] || 'N/A',
+          bancali: row[bancaliIndex] || 'N/A'
+        });
+        
         if (debugLog) {
           debugLog.skipped.push(`RIGA ${i + 1} - MOTIVO: ${motivo}`);
         }
@@ -861,7 +881,12 @@ export async function parseCSVFile(
 
     result.skippedRows = totalSkippedRows;
     
-    console.log(`Parsing CSV completato: ${result.documents.length} documenti, ${result.documentRows.length} righe, ${totalSkippedRows} righe scartate`);
+    console.log(`✅ [PARSER] Parsing CSV completato:`);
+    console.log(`   - Documenti: ${result.documents.length}`);
+    console.log(`   - Righe documenti: ${result.documentRows.length}`);
+    console.log(`   - Righe saltate: ${totalSkippedRows}`);
+    console.log(`   - Errori: ${result.errors.length}`);
+    console.log(`   - Errori validazione: ${result.validationErrors?.length || 0}`);
     
     // Validazione finale: totale uscite > totale ingressi per documento
     documentiIngressi.forEach((ingressi, docNum) => {
@@ -923,6 +948,8 @@ export async function parseCSVFile(
         '═══════════════════════════════════════════════════════════════'
       ].join('\n');
 
+      const Platform = getPlatform();
+      console.log('🔵 [PARSER] Platform ottenuto:', Platform ? `OS=${Platform.OS}` : 'null/undefined');
       if (Platform && Platform.OS === 'web') {
         if (typeof document !== 'undefined') {
           const blob = new Blob([debugContent], { type: 'text/plain;charset=utf-8' });

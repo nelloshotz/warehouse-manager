@@ -145,6 +145,7 @@ export default function ExcelFileProcessor() {
       }
       
       // Parsa il file Excel con callback di progresso
+      console.log('🔵 [EXCEL_PROCESSOR] Avvio parsing file CSV...');
       const parseResult = await parseCSVFile(fileUri, (progress) => {
         const progressPercent = progress.current / progress.total;
         setUploadProgress(0.05 + progressPercent * 0.85); // 5% - 90%
@@ -159,6 +160,13 @@ export default function ExcelFileProcessor() {
       
       setUploadProgress(0.9);
       setProgressMessage('Finalizzazione...');
+      
+      console.log('✅ [EXCEL_PROCESSOR] Parsing completato:');
+      console.log('   - Documenti:', parseResult.documents.length);
+      console.log('   - Righe documenti:', parseResult.documentRows.length);
+      console.log('   - Errori:', parseResult.errors.length);
+      console.log('   - Righe saltate:', parseResult.skippedRows);
+      console.log('   - Errori validazione:', parseResult.validationErrors?.length || 0);
       
       // Gestisci errori di parsing
       if (parseResult.errors.length > 0) {
@@ -267,9 +275,16 @@ export default function ExcelFileProcessor() {
       });
       
       // Ricalcola i riepiloghi dal JSON
-      console.log('Chiamata calculateSummaries dal JSON database');
+      console.log('🔵 [EXCEL_PROCESSOR] Chiamata calculateSummaries dal JSON database');
       await calculateSummaries();
-      console.log('✅ calculateSummaries completato');
+      console.log('✅ [EXCEL_PROCESSOR] calculateSummaries completato');
+      
+      // Verifica lo stato finale dello store
+      const finalState = useWarehouseStore.getState();
+      console.log('📊 [EXCEL_PROCESSOR] Stato finale store:');
+      console.log('   - Documenti nello store:', finalState.documents.length);
+      console.log('   - Righe nello store:', finalState.documentRows.length);
+      console.log('   - Summaries calcolati:', Object.keys(finalState.summaries || {}).length);
       
       // Mostra errori di validazione dopo che tutto è completato
       if (parseResult.validationErrors && parseResult.validationErrors.length > 0) {
