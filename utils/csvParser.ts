@@ -449,6 +449,21 @@ export async function parseCSVFile(
     const totalRows = lines.length - 1;
     console.log(`🔵 [PARSER] Inizio elaborazione ${totalRows} righe CSV`);
     
+    // Funzione helper per yield al browser (non bloccare il thread)
+    const yieldToBrowser = (): Promise<void> => {
+      return new Promise(resolve => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 50 });
+        } else {
+          setTimeout(() => resolve(), 0);
+        }
+      });
+    };
+    
+    // Processa le righe in batch per non bloccare il browser
+    const BATCH_SIZE = 100; // Processa 100 righe alla volta
+    let processedRows = 0;
+    
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       if (!line || line.trim().length === 0) {
@@ -458,9 +473,25 @@ export async function parseCSVFile(
         continue;
       }
 
-      // Log ogni 1000 righe per monitorare il progresso
-      if (i % 1000 === 0) {
-        console.log(`🔵 [PARSER] Elaborate ${i}/${totalRows} righe... (documenti: ${result.documents.length}, righe: ${result.documentRows.length})`);
+      // Yield al browser ogni BATCH_SIZE righe per non bloccare
+      if (i % BATCH_SIZE === 0) {
+        await yieldToBrowser();
+        processedRows += BATCH_SIZE;
+        
+        // Log ogni 1000 righe per monitorare il progresso
+        if (i % 1000 === 0) {
+          console.log(`🔵 [PARSER] Elaborate ${i}/${totalRows} righe... (documenti: ${result.documents.length}, righe: ${result.documentRows.length})`);
+        }
+        
+        // Aggiorna progresso ogni batch
+        if (onProgress) {
+          const progressPercent = 60 + Math.floor((i / totalRows) * 40);
+          onProgress({
+            current: progressPercent,
+            total: 100,
+            stage: 'processing'
+          });
+        }
       }
 
       try {
@@ -845,15 +876,7 @@ export async function parseCSVFile(
           debugLog.processed.push(logLine);
         }
         
-        // Aggiorna progresso ogni 100 righe
-        if (i % 100 === 0 && onProgress) {
-          const progressPercent = 60 + Math.floor((i / totalRows) * 40);
-          onProgress({
-            current: progressPercent,
-            total: 100,
-            stage: 'processing'
-          });
-        }
+        // Progresso aggiornato nel batch processing sopra
       } catch (error) {
         totalSkippedRows++;
         const motivo = `errore durante il parsing: ${error instanceof Error ? error.message : String(error)}`;
