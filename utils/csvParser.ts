@@ -1,13 +1,39 @@
 import * as FileSystem from 'expo-file-system';
 import { Document, DocumentRow } from '@/types/warehouse';
 
-// Funzione helper per ottenere Platform in modo sicuro
+// Cache per Platform per evitare accessi multipli
+let platformCache: { OS: string } | null | undefined = undefined;
+
+// Funzione helper per ottenere Platform in modo sicuro (lazy loading)
 function getPlatform(): { OS: string } | null {
+  // Se già in cache, restituisci il valore
+  if (platformCache !== undefined) {
+    return platformCache;
+  }
+  
+  // Prova a ottenere Platform in modo sicuro
   try {
-    const RNPlatform = require('react-native');
-    return RNPlatform.Platform || null;
-  } catch (e) {
-    // Platform non disponibile (es. in contesti Node.js)
+    // Usa una funzione wrapper per evitare problemi di inizializzazione
+    const getRNPlatform = () => {
+      try {
+        // Prova prima con require dinamico
+        const reactNative = require('react-native');
+        if (reactNative && reactNative.Platform) {
+          return reactNative.Platform;
+        }
+      } catch (e) {
+        // Ignora errori
+      }
+      return null;
+    };
+    
+    const platform = getRNPlatform();
+    platformCache = platform;
+    return platform;
+  } catch (e: any) {
+    // In caso di errore, cache null e restituisci null
+    platformCache = null;
+    console.warn('⚠️ [PARSER] Impossibile ottenere Platform:', e?.message || String(e));
     return null;
   }
 }
@@ -291,23 +317,50 @@ export async function parseCSVFile(
   onProgress?: (progress: ParseProgress) => void
 ): Promise<ExcelParseResult> {
   // Sistema di logging dettagliato per file di log
+  // Inizializza IMMEDIATAMENTE per catturare anche errori molto precoci
   const detailedLog: string[] = [];
+  
+  // Funzione di logging sicura che non può fallire
   const logEntry = (message: string, data?: any) => {
-    const timestamp = new Date().toISOString();
-    const logLine = `[${timestamp}] ${message}`;
-    detailedLog.push(logLine);
-    if (data !== undefined) {
-      detailedLog.push(`  Data: ${JSON.stringify(data, null, 2)}`);
+    try {
+      const timestamp = new Date().toISOString();
+      const logLine = `[${timestamp}] ${message}`;
+      detailedLog.push(logLine);
+      if (data !== undefined) {
+        try {
+          detailedLog.push(`  Data: ${JSON.stringify(data, null, 2)}`);
+        } catch (e) {
+          detailedLog.push(`  Data: [Impossibile serializzare: ${String(data)}]`);
+        }
+      }
+      // Mantieni anche console.log per debugging immediato (ma non può fallire)
+      try {
+        console.log(message, data || '');
+      } catch (e) {
+        // Ignora errori di console.log
+      }
+    } catch (e) {
+      // Se anche il logging fallisce, prova almeno a salvare un messaggio minimo
+      try {
+        detailedLog.push(`[ERRORE LOGGING] ${message}`);
+      } catch (e2) {
+        // Se anche questo fallisce, non possiamo fare altro
+      }
     }
-    // Mantieni anche console.log per debugging immediato
-    console.log(message, data || '');
   };
   
-  logEntry('═══════════════════════════════════════════════════════════════');
-  logEntry('INIZIO PARSING CSV');
-  logEntry('═══════════════════════════════════════════════════════════════');
-  logEntry('File URI:', fileUri);
-  logEntry('onProgress presente:', !!onProgress);
+  // Log iniziale IMMEDIATO per tracciare l'inizio
+  try {
+    logEntry('═══════════════════════════════════════════════════════════════');
+    logEntry('INIZIO PARSING CSV');
+    logEntry('═══════════════════════════════════════════════════════════════');
+    logEntry('File URI:', fileUri);
+    logEntry('onProgress presente:', !!onProgress);
+    logEntry('Timestamp inizio:', new Date().toISOString());
+  } catch (e) {
+    // Se anche il logging iniziale fallisce, almeno prova a salvare qualcosa
+    detailedLog.push(`[ERRORE LOGGING INIZIALE] ${String(e)}`);
+  }
   
   const result: ExcelParseResult = {
     documents: [],
@@ -316,11 +369,43 @@ export async function parseCSVFile(
     skippedRows: 0
   };
 
-  logEntry('Risultato inizializzato');
-
   try {
+    logEntry('Risultato inizializzato');
+  } catch (e) {
+    // Ignora errori di logging
+  }
+
+  // Wrapper globale per catturare qualsiasi errore di inizializzazione
+  try {
+    // Log informazioni ambiente
+    try {
+      logEntry('Informazioni ambiente:', {
+        hasWindow: typeof window !== 'undefined',
+        hasDocument: typeof document !== 'undefined',
+        hasFileSystem: typeof FileSystem !== 'undefined',
+        hasRequire: typeof require !== 'undefined',
+        nodeEnv: typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'
+      });
+      
+      // Test getPlatform() all'inizio per verificare che funzioni
+      try {
+        logEntry('Test getPlatform()...');
+        const testPlatform = getPlatform();
+        logEntry('✅ getPlatform() funziona:', testPlatform ? `OS=${testPlatform.OS}` : 'null');
+      } catch (platformError: any) {
+        logEntry('❌ ERRORE getPlatform() durante test:', platformError?.message || String(platformError));
+        logEntry('Stack getPlatform():', platformError?.stack || 'N/A');
+      }
+    } catch (e) {
+      // Ignora errori di logging ambiente
+    }
+
     // Fase 1: Leggi il file
-    console.log('🔵 [PARSER] Fase 1: Lettura file...');
+    try {
+      console.log('🔵 [PARSER] Fase 1: Lettura file...');
+    } catch (e) {
+      // Ignora errori console.log
+    }
     if (onProgress) {
       console.log('🔵 [PARSER] Aggiornamento progresso: reading');
       onProgress({ current: 0, total: 100, stage: 'reading' });
@@ -1033,32 +1118,56 @@ export async function parseCSVFile(
         '═══════════════════════════════════════════════════════════════'
       ].join('\n');
 
-      const Platform = getPlatform();
-      logEntry('Platform ottenuto:', Platform ? `OS=${Platform.OS}` : 'null/undefined');
+      // Ottieni Platform in modo sicuro
+      let Platform: { OS: string } | null = null;
+      try {
+        Platform = getPlatform();
+        logEntry('Platform ottenuto:', Platform ? `OS=${Platform.OS}` : 'null/undefined');
+      } catch (e: any) {
+        logEntry('⚠️ Errore ottenendo Platform:', e?.message || String(e));
+        Platform = null;
+      }
       
-      if (Platform && Platform.OS === 'web') {
-        if (typeof document !== 'undefined') {
-          const blob = new Blob([fullLogContent], { type: 'text/plain;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = logFileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          logEntry(`✅ File di log dettagliato scaricato: ${logFileName}`);
+      // Prova a scaricare/salvare il file di log
+      let logSaved = false;
+      try {
+        if (Platform && Platform.OS === 'web') {
+          if (typeof document !== 'undefined') {
+            const blob = new Blob([fullLogContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = logFileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            logEntry(`✅ File di log dettagliato scaricato: ${logFileName}`);
+            logSaved = true;
+          }
+        } else {
+          // Su mobile, salva nella directory documenti
+          try {
+            const documentDir = (FileSystem as any).documentDirectory;
+            if (documentDir) {
+              const debugFilePath = `${documentDir}${logFileName}`;
+              await FileSystem.writeAsStringAsync(debugFilePath, fullLogContent, {
+                encoding: (FileSystem as any).EncodingType?.UTF8 || 'utf8'
+              });
+              logEntry(`✅ File di log dettagliato salvato: ${debugFilePath}`);
+              logSaved = true;
+            }
+          } catch (fsError: any) {
+            logEntry('⚠️ Errore salvataggio file su mobile:', fsError?.message || String(fsError));
+          }
         }
-      } else {
-        // Su mobile, salva nella directory documenti
-        const documentDir = (FileSystem as any).documentDirectory;
-        if (documentDir) {
-          const debugFilePath = `${documentDir}${logFileName}`;
-          await FileSystem.writeAsStringAsync(debugFilePath, fullLogContent, {
-            encoding: (FileSystem as any).EncodingType?.UTF8 || 'utf8'
-          });
-          logEntry(`✅ File di log dettagliato salvato: ${debugFilePath}`);
-        }
+      } catch (saveError: any) {
+        logEntry('⚠️ Errore generico salvataggio log:', saveError?.message || String(saveError));
+      }
+      
+      // Se non è stato salvato, almeno logga un avviso
+      if (!logSaved) {
+        logEntry('⚠️ File di log non salvato (piattaforma non supportata o errore)');
       }
     } catch (error) {
       logEntry('❌ Errore nella scrittura del file di log:', error instanceof Error ? error.message : String(error));
@@ -1096,7 +1205,76 @@ export async function parseCSVFile(
         '═══════════════════════════════════════════════════════════════'
       ].join('\n');
       
-      const Platform = getPlatform();
+      // Prova a salvare il log di errore
+      try {
+        let Platform: { OS: string } | null = null;
+        try {
+          Platform = getPlatform();
+        } catch (e) {
+          // Ignora errori ottenendo Platform
+        }
+        
+        if (Platform && Platform.OS === 'web' && typeof document !== 'undefined') {
+          const blob = new Blob([errorLogContent], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = logFileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+      } catch (logError) {
+        // Se anche il salvataggio del log di errore fallisce, almeno logga in console
+        console.error('Impossibile salvare log di errore:', logError);
+      }
+    } catch (logError) {
+      console.error('Impossibile salvare log di errore:', logError);
+    }
+  } catch (globalError: any) {
+    // Cattura qualsiasi errore globale che non è stato gestito
+    const errorMessage = globalError instanceof Error ? globalError.message : String(globalError);
+    const errorStack = globalError instanceof Error ? globalError.stack : 'N/A';
+    
+    // Prova a loggare l'errore globale
+    try {
+      detailedLog.push(`❌ ERRORE GLOBALE NON GESTITO: ${errorMessage}`);
+      detailedLog.push(`Stack trace: ${errorStack}`);
+      detailedLog.push(`Timestamp: ${new Date().toISOString()}`);
+    } catch (e) {
+      // Se anche questo fallisce, non possiamo fare altro
+    }
+    
+    // Aggiungi all'array errori del risultato
+    result.errors.push(`Errore globale durante il parsing: ${errorMessage}`);
+    
+    // Prova a salvare un log di errore globale
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFileName = `parser-error-global-${timestamp}.log`;
+      const errorLogContent = [
+        '═══════════════════════════════════════════════════════════════',
+        '  ERRORE GLOBALE DURANTE PARSING CSV',
+        '═══════════════════════════════════════════════════════════════',
+        '',
+        `Errore: ${errorMessage}`,
+        `Stack trace: ${errorStack}`,
+        '',
+        'Log fino al punto di errore:',
+        '─'.repeat(70),
+        ...(typeof detailedLog !== 'undefined' ? detailedLog : ['Nessun log disponibile']),
+        '',
+        '═══════════════════════════════════════════════════════════════'
+      ].join('\n');
+      
+      let Platform: { OS: string } | null = null;
+      try {
+        Platform = getPlatform();
+      } catch (e) {
+        // Ignora
+      }
+      
       if (Platform && Platform.OS === 'web' && typeof document !== 'undefined') {
         const blob = new Blob([errorLogContent], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1109,7 +1287,7 @@ export async function parseCSVFile(
         URL.revokeObjectURL(url);
       }
     } catch (logError) {
-      console.error('Impossibile salvare log di errore:', logError);
+      console.error('Impossibile salvare log di errore globale:', logError);
     }
   }
 
