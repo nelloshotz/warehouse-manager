@@ -1232,63 +1232,6 @@ export async function parseCSVFile(
     } catch (logError) {
       console.error('Impossibile salvare log di errore:', logError);
     }
-  } catch (globalError: any) {
-    // Cattura qualsiasi errore globale che non è stato gestito
-    const errorMessage = globalError instanceof Error ? globalError.message : String(globalError);
-    const errorStack = globalError instanceof Error ? globalError.stack : 'N/A';
-    
-    // Prova a loggare l'errore globale
-    try {
-      detailedLog.push(`❌ ERRORE GLOBALE NON GESTITO: ${errorMessage}`);
-      detailedLog.push(`Stack trace: ${errorStack}`);
-      detailedLog.push(`Timestamp: ${new Date().toISOString()}`);
-    } catch (e) {
-      // Se anche questo fallisce, non possiamo fare altro
-    }
-    
-    // Aggiungi all'array errori del risultato
-    result.errors.push(`Errore globale durante il parsing: ${errorMessage}`);
-    
-    // Prova a salvare un log di errore globale
-    try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const logFileName = `parser-error-global-${timestamp}.log`;
-      const errorLogContent = [
-        '═══════════════════════════════════════════════════════════════',
-        '  ERRORE GLOBALE DURANTE PARSING CSV',
-        '═══════════════════════════════════════════════════════════════',
-        '',
-        `Errore: ${errorMessage}`,
-        `Stack trace: ${errorStack}`,
-        '',
-        'Log fino al punto di errore:',
-        '─'.repeat(70),
-        ...(typeof detailedLog !== 'undefined' ? detailedLog : ['Nessun log disponibile']),
-        '',
-        '═══════════════════════════════════════════════════════════════'
-      ].join('\n');
-      
-      let Platform: { OS: string } | null = null;
-      try {
-        Platform = getPlatform();
-      } catch (e) {
-        // Ignora
-      }
-      
-      if (Platform && Platform.OS === 'web' && typeof document !== 'undefined') {
-        const blob = new Blob([errorLogContent], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = logFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }
-    } catch (logError) {
-      console.error('Impossibile salvare log di errore globale:', logError);
-    }
   }
 
   return result;
