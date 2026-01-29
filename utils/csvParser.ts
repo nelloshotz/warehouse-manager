@@ -612,9 +612,12 @@ export async function parseCSVFile(
         }
       }
 
+      // Dichiarare row fuori dal try per renderla accessibile nel catch
+      let row: string[] | null = null;
+      
       try {
         // Split della riga per punto e virgola
-        const row = line.split(';');
+        row = line.split(';');
         
         // Verifica colonna verifica (formato: "numero - CASILLI")
         const verificaCol = extractText(row[verificaColIndex]);
@@ -1001,17 +1004,17 @@ export async function parseCSVFile(
         const errorStack = error instanceof Error ? error.stack : 'N/A';
         const errorDetails = {
           riga: i + 1,
-          docNum: row?.[docNumIndex] || 'N/A',
-          dataIngresso: row?.[dataIngressoIndex] || 'N/A',
-          bancali: row?.[bancaliIndex] || 'N/A',
-          tipologia: row?.[tipologiaIndex] || 'N/A',
-          verificaCol: row?.[verificaColIndex] || 'N/A'
+          docNum: (row && row[docNumIndex]) ? String(row[docNumIndex]) : 'N/A',
+          dataIngresso: (row && row[dataIngressoIndex]) ? String(row[dataIngressoIndex]) : 'N/A',
+          bancali: (row && row[bancaliIndex]) ? String(row[bancaliIndex]) : 'N/A',
+          tipologia: (row && row[tipologiaIndex]) ? String(row[tipologiaIndex]) : 'N/A',
+          verificaCol: (row && row[verificaColIndex]) ? String(row[verificaColIndex]) : 'N/A'
         };
         
         logEntry(`❌ ERRORE RIGA ${i + 1}: ${motivo}`);
         logEntry('Stack trace:', errorStack);
         logEntry('Dettagli riga:', errorDetails);
-        logEntry('Row completa (prime 10 colonne):', row?.slice(0, 10) || 'N/A');
+        logEntry('Row completa (prime 10 colonne):', (row && row.length > 0) ? row.slice(0, 10).join(';') : 'N/A');
         
         if (debugLog) {
           debugLog.skipped.push(`RIGA ${i + 1} - MOTIVO: ${motivo}`);
