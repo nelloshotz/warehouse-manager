@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system';
-import { Document, DocumentRow } from '@/types/warehouse';
+import { Document as DocumentType, DocumentRow as DocumentRowType } from '@/types/warehouse';
 
 // Cache per Platform per evitare accessi multipli
 let platformCache: { OS: string } | null | undefined = undefined;
@@ -30,8 +30,8 @@ function getPlatform(): { OS: string } | null {
 }
 
 export interface ExcelParseResult {
-  documents: Document[];
-  documentRows: DocumentRow[];
+  documents: DocumentType[];
+  documentRows: DocumentRowType[];
   errors: string[];
   skippedRows: number;
   dateFuture?: Array<{
@@ -519,7 +519,7 @@ export async function parseCSVFile(
     }
 
     // Mappa dei documenti per numero
-    const documentsMap = new Map<string, Document>();
+    const documentsMap = new Map<string, DocumentType>();
     // Mappa per memorizzare la data di ingresso per ogni documento
     const documentDateMap = new Map<string, string>();
     // Mappa per tracciare se un documento ha almeno una riga con bancali > 0
@@ -648,11 +648,11 @@ export async function parseCSVFile(
         }
 
         // Crea o recupera il documento
-        let document: Document | undefined;
+        let document: DocumentType | undefined;
         if (documentsMap.has(docNum)) {
           document = documentsMap.get(docNum)!;
         } else {
-          const newDocument: Document = {
+          const newDocument: DocumentType = {
             id: baseId + globalDocCounter.value++,
             numero_documento: docNum
           };
@@ -765,7 +765,7 @@ export async function parseCSVFile(
         const note = extractText(row[noteIndex]);
 
         // Processa le uscite (15 uscite totali)
-        const uscite: DocumentRow['uscite'] = {};
+        const uscite: DocumentRowType['uscite'] = {};
         const usciteDebug: string[] = [];
         // TEMPORANEO: Memorizza le date delle uscite di questa riga per la prossima iterazione
         // TODO: Commentare questa logica in futuro quando non più necessaria
@@ -991,7 +991,7 @@ export async function parseCSVFile(
           continue;
         }
         
-        const documentRow: DocumentRow = {
+        const documentRow: DocumentRowType = {
           id: baseId + 1000000 + globalRowCounter.value++,
           documento_id: document.id,
           data_ingresso: dataIngresso,
