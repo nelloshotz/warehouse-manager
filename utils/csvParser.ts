@@ -1,6 +1,15 @@
 import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
 import { Document, DocumentRow } from '@/types/warehouse';
+
+// Import Platform in modo sicuro (può non essere disponibile in alcuni contesti)
+let Platform: { OS: string } | null = null;
+try {
+  const RNPlatform = require('react-native');
+  Platform = RNPlatform.Platform || null;
+} catch (e) {
+  // Platform non disponibile (es. in contesti Node.js)
+  Platform = null;
+}
 
 export interface ExcelParseResult {
   documents: Document[];
@@ -914,7 +923,7 @@ export async function parseCSVFile(
         '═══════════════════════════════════════════════════════════════'
       ].join('\n');
 
-      if (Platform.OS === 'web') {
+      if (Platform && Platform.OS === 'web') {
         if (typeof document !== 'undefined') {
           const blob = new Blob([debugContent], { type: 'text/plain;charset=utf-8' });
           const url = URL.createObjectURL(blob);
