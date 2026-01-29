@@ -290,9 +290,24 @@ export async function parseCSVFile(
   fileUri: string,
   onProgress?: (progress: ParseProgress) => void
 ): Promise<ExcelParseResult> {
-  console.log('🔵 [PARSER] ========== INIZIO PARSING CSV ==========');
-  console.log('🔵 [PARSER] fileUri:', fileUri);
-  console.log('🔵 [PARSER] onProgress presente:', !!onProgress);
+  // Sistema di logging dettagliato per file di log
+  const detailedLog: string[] = [];
+  const logEntry = (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    const logLine = `[${timestamp}] ${message}`;
+    detailedLog.push(logLine);
+    if (data !== undefined) {
+      detailedLog.push(`  Data: ${JSON.stringify(data, null, 2)}`);
+    }
+    // Mantieni anche console.log per debugging immediato
+    console.log(message, data || '');
+  };
+  
+  logEntry('═══════════════════════════════════════════════════════════════');
+  logEntry('INIZIO PARSING CSV');
+  logEntry('═══════════════════════════════════════════════════════════════');
+  logEntry('File URI:', fileUri);
+  logEntry('onProgress presente:', !!onProgress);
   
   const result: ExcelParseResult = {
     documents: [],
@@ -301,7 +316,7 @@ export async function parseCSVFile(
     skippedRows: 0
   };
 
-  console.log('🔵 [PARSER] Risultato inizializzato');
+  logEntry('Risultato inizializzato');
 
   try {
     // Fase 1: Leggi il file
@@ -316,46 +331,46 @@ export async function parseCSVFile(
     let csvContent: string;
     
     // Se l'URI è un data URI (base64), decodifica il contenuto
-    console.log('🔵 [PARSER] Verifica tipo URI...');
+    logEntry('Verifica tipo URI...');
     if (fileUri.startsWith('data:')) {
-      console.log('🔵 [PARSER] Data URI rilevato, decodifica base64...');
+      logEntry('Data URI rilevato, decodifica base64...');
       try {
         // Estrai il base64 dal data URI
         const base64Match = fileUri.match(/base64,(.+)$/);
-        console.log('🔵 [PARSER] Base64 match trovato:', !!base64Match);
+        logEntry('Base64 match trovato:', !!base64Match);
         if (base64Match && base64Match[1]) {
-          console.log('🔵 [PARSER] Lunghezza base64:', base64Match[1].length);
+          logEntry('Lunghezza base64:', base64Match[1].length);
           // Decodifica base64 a stringa (per CSV, leggiamo direttamente come testo)
           if (typeof atob !== 'undefined') {
-            console.log('🔵 [PARSER] Usando atob (browser)...');
+            logEntry('Usando atob (browser)...');
             // Browser/Web
             csvContent = atob(base64Match[1]);
           } else {
-            console.log('🔵 [PARSER] Usando Buffer (React Native)...');
+            logEntry('Usando Buffer (React Native)...');
             // React Native - usa Buffer se disponibile
             const Buffer = require('buffer').Buffer;
             csvContent = Buffer.from(base64Match[1], 'base64').toString('utf8');
           }
-          console.log('✅ [PARSER] File CSV letto da data URI, dimensione:', csvContent.length);
+          logEntry('✅ File CSV letto da data URI, dimensione:', csvContent.length);
         } else {
           throw new Error('Formato data URI non valido per CSV');
         }
       } catch (error: any) {
-        console.error('❌ [PARSER] Errore decodifica data URI:', error);
-        console.error('❌ [PARSER] Stack:', error?.stack);
+        logEntry('❌ Errore decodifica data URI:', error?.message || String(error));
+        logEntry('Stack:', error?.stack || 'N/A');
         throw new Error(`Impossibile decodificare il file CSV: ${error?.message || String(error)}`);
       }
     } else {
-      console.log('🔵 [PARSER] File URI normale, lettura con FileSystem...');
+      logEntry('File URI normale, lettura con FileSystem...');
       // Leggi il file usando FileSystem
       try {
         csvContent = await FileSystem.readAsStringAsync(fileUri, {
           encoding: (FileSystem as any).EncodingType?.UTF8 || 'utf8'
         });
-        console.log('✅ [PARSER] File CSV letto, dimensione:', csvContent.length);
+        logEntry('✅ File CSV letto, dimensione:', csvContent.length);
       } catch (error: any) {
-        console.error('❌ [PARSER] Errore lettura file:', error);
-        console.error('❌ [PARSER] Stack:', error?.stack);
+        logEntry('❌ Errore lettura file:', error?.message || String(error));
+        logEntry('Stack:', error?.stack || 'N/A');
         throw new Error(`Impossibile leggere il file: ${error?.message || String(error)}`);
       }
     }
@@ -908,15 +923,19 @@ export async function parseCSVFile(
         totalSkippedRows++;
         const motivo = `errore durante il parsing: ${error instanceof Error ? error.message : String(error)}`;
         const errorStack = error instanceof Error ? error.stack : 'N/A';
-        
-        console.error(`❌ [PARSER] Errore riga ${i + 1}:`, motivo);
-        console.error(`❌ [PARSER] Stack trace:`, errorStack);
-        console.error(`❌ [PARSER] Dettagli riga:`, {
+        const errorDetails = {
           riga: i + 1,
-          docNum: row[docNumIndex] || 'N/A',
-          dataIngresso: row[dataIngressoIndex] || 'N/A',
-          bancali: row[bancaliIndex] || 'N/A'
-        });
+          docNum: row?.[docNumIndex] || 'N/A',
+          dataIngresso: row?.[dataIngressoIndex] || 'N/A',
+          bancali: row?.[bancaliIndex] || 'N/A',
+          tipologia: row?.[tipologiaIndex] || 'N/A',
+          verificaCol: row?.[verificaColIndex] || 'N/A'
+        };
+        
+        logEntry(`❌ ERRORE RIGA ${i + 1}: ${motivo}`);
+        logEntry('Stack trace:', errorStack);
+        logEntry('Dettagli riga:', errorDetails);
+        logEntry('Row completa (prime 10 colonne):', row?.slice(0, 10) || 'N/A');
         
         if (debugLog) {
           debugLog.skipped.push(`RIGA ${i + 1} - MOTIVO: ${motivo}`);
@@ -931,12 +950,17 @@ export async function parseCSVFile(
 
     result.skippedRows = totalSkippedRows;
     
-    console.log(`✅ [PARSER] Parsing CSV completato:`);
-    console.log(`   - Documenti: ${result.documents.length}`);
-    console.log(`   - Righe documenti: ${result.documentRows.length}`);
-    console.log(`   - Righe saltate: ${totalSkippedRows}`);
-    console.log(`   - Errori: ${result.errors.length}`);
-    console.log(`   - Errori validazione: ${result.validationErrors?.length || 0}`);
+    logEntry('═══════════════════════════════════════════════════════════════');
+    logEntry('PARSING CSV COMPLETATO');
+    logEntry('═══════════════════════════════════════════════════════════════');
+    logEntry('Risultati finali:', {
+      documenti: result.documents.length,
+      righeDocumenti: result.documentRows.length,
+      righeSaltate: totalSkippedRows,
+      errori: result.errors.length,
+      erroriValidazione: result.validationErrors?.length || 0,
+      dateFuture: dateFuturePerDocumento.size
+    });
     
     // Validazione finale: totale uscite > totale ingressi per documento
     documentiIngressi.forEach((ingressi, docNum) => {
@@ -971,21 +995,32 @@ export async function parseCSVFile(
       console.log(`⚠️ Trovati ${validationErrors.length} errori di validazione`);
     }
 
-    // Scrivi il file di debug
+    // Genera e scarica il file di log dettagliato
     try {
-      const debugContent = [
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFileName = `parser-debug-${timestamp}.log`;
+      
+      // Combina tutti i log in un unico file
+      const fullLogContent = [
         '═══════════════════════════════════════════════════════════════',
-        '  DEBUG LOG CSV - RIGHE PROCESSATE',
+        '  LOG DETTAGLIATO PARSER CSV',
         '═══════════════════════════════════════════════════════════════',
         '',
+        'LOG DETTAGLIATO (tutte le fasi):',
+        '─'.repeat(70),
+        ...detailedLog,
+        '',
+        '─'.repeat(70),
+        '',
+        'DEBUG LOG CSV - RIGHE PROCESSATE:',
+        '─'.repeat(70),
         `Totale righe processate: ${debugLog.processed.length - 1}`,
         `Totale righe saltate: ${debugLog.skipped.length}`,
         '',
+        'RIGHE PROCESSATE (prime 100):',
         '─'.repeat(70),
-        '',
-        'RIGHE PROCESSATE:',
-        '─'.repeat(70),
-        ...debugLog.processed,
+        ...debugLog.processed.slice(0, 100), // Prime 100 righe processate
+        debugLog.processed.length > 100 ? `\n... e altre ${debugLog.processed.length - 100} righe processate` : '',
         '',
         '─'.repeat(70),
         '',
@@ -994,44 +1029,88 @@ export async function parseCSVFile(
         ...debugLog.skipped,
         '',
         '═══════════════════════════════════════════════════════════════',
-        '  FINE DEBUG LOG CSV',
+        '  FINE LOG DETTAGLIATO',
         '═══════════════════════════════════════════════════════════════'
       ].join('\n');
 
       const Platform = getPlatform();
-      console.log('🔵 [PARSER] Platform ottenuto:', Platform ? `OS=${Platform.OS}` : 'null/undefined');
+      logEntry('Platform ottenuto:', Platform ? `OS=${Platform.OS}` : 'null/undefined');
+      
       if (Platform && Platform.OS === 'web') {
         if (typeof document !== 'undefined') {
-          const blob = new Blob([debugContent], { type: 'text/plain;charset=utf-8' });
+          const blob = new Blob([fullLogContent], { type: 'text/plain;charset=utf-8' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = 'debug-csv.log';
+          link.download = logFileName;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
-          console.log(`\n✅ File di debug CSV scaricato: debug-csv.log`);
+          logEntry(`✅ File di log dettagliato scaricato: ${logFileName}`);
         }
       } else {
+        // Su mobile, salva nella directory documenti
         const documentDir = (FileSystem as any).documentDirectory;
         if (documentDir) {
-          const debugFilePath = `${documentDir}debug-csv.log`;
-          await FileSystem.writeAsStringAsync(debugFilePath, debugContent, {
+          const debugFilePath = `${documentDir}${logFileName}`;
+          await FileSystem.writeAsStringAsync(debugFilePath, fullLogContent, {
             encoding: (FileSystem as any).EncodingType?.UTF8 || 'utf8'
           });
-          console.log(`\n✅ File di debug CSV creato: ${debugFilePath}`);
+          logEntry(`✅ File di log dettagliato salvato: ${debugFilePath}`);
         }
       }
-      
-      console.log(`   - Righe processate: ${debugLog.processed.length - 1}`);
-      console.log(`   - Righe saltate: ${debugLog.skipped.length}`);
     } catch (error) {
-      console.error('Errore nella scrittura del file di debug:', error);
+      logEntry('❌ Errore nella scrittura del file di log:', error instanceof Error ? error.message : String(error));
+      console.error('Errore nella scrittura del file di log:', error);
     }
 
   } catch (error) {
-    result.errors.push(`Errore durante la lettura del file: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : 'N/A';
+    
+    // Aggiungi l'errore al log dettagliato anche in caso di errore globale
+    if (typeof detailedLog !== 'undefined') {
+      detailedLog.push(`❌ ERRORE GLOBALE: ${errorMessage}`);
+      detailedLog.push(`Stack trace: ${errorStack}`);
+    }
+    
+    result.errors.push(`Errore durante la lettura del file: ${errorMessage}`);
+    
+    // Cerca di salvare il log anche in caso di errore
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFileName = `parser-error-${timestamp}.log`;
+      const errorLogContent = [
+        '═══════════════════════════════════════════════════════════════',
+        '  ERRORE DURANTE PARSING CSV',
+        '═══════════════════════════════════════════════════════════════',
+        '',
+        `Errore: ${errorMessage}`,
+        `Stack trace: ${errorStack}`,
+        '',
+        'Log fino al punto di errore:',
+        '─'.repeat(70),
+        ...(typeof detailedLog !== 'undefined' ? detailedLog : ['Nessun log disponibile']),
+        '',
+        '═══════════════════════════════════════════════════════════════'
+      ].join('\n');
+      
+      const Platform = getPlatform();
+      if (Platform && Platform.OS === 'web' && typeof document !== 'undefined') {
+        const blob = new Blob([errorLogContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = logFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (logError) {
+      console.error('Impossibile salvare log di errore:', logError);
+    }
   }
 
   return result;
