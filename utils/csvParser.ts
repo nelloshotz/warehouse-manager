@@ -52,6 +52,12 @@ export interface ParseProgress {
   stage: 'reading' | 'parsing' | 'processing';
 }
 
+// Cattura Date a livello di modulo per evitare problemi di inizializzazione durante minificazione
+const DateConstructor = (typeof globalThis !== 'undefined' && globalThis.Date) || 
+                        (typeof window !== 'undefined' && window.Date) || 
+                        (typeof global !== 'undefined' && global.Date) || 
+                        Date;
+
 // Funzioni helper (copiate dal parser Excel)
 
 /**
@@ -79,7 +85,7 @@ function parseDateWithContext(value: any, referenceDate?: string | null): string
       // Determina se la data è ambigua (entrambi <= 12)
       if (part1 > 12) {
         // Formato DD/MM: part1 è il giorno
-        const date = new Date(Date.UTC(year, part2 - 1, part1));
+        const date = new DateConstructor(DateConstructor.UTC(year, part2 - 1, part1));
         if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && 
             date.getUTCMonth() === part2 - 1 && date.getUTCDate() === part1) {
           return `${year}-${String(part2).padStart(2, '0')}-${String(part1).padStart(2, '0')}`;
@@ -87,7 +93,7 @@ function parseDateWithContext(value: any, referenceDate?: string | null): string
         return null;
       } else if (part2 > 12) {
         // Formato MM/DD: part1 è il mese
-        const date = new Date(Date.UTC(year, part1 - 1, part2));
+        const date = new DateConstructor(DateConstructor.UTC(year, part1 - 1, part2));
         if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && 
             date.getUTCMonth() === part1 - 1 && date.getUTCDate() === part2) {
           return `${year}-${String(part1).padStart(2, '0')}-${String(part2).padStart(2, '0')}`;
@@ -95,14 +101,14 @@ function parseDateWithContext(value: any, referenceDate?: string | null): string
         return null;
       } else {
         // Entrambi <= 12: prova ENTRAMBI i formati
-        const dateDDMM = new Date(Date.UTC(year, part2 - 1, part1));
+        const dateDDMM = new DateConstructor(DateConstructor.UTC(year, part2 - 1, part1));
         const isValidDDMM = !isNaN(dateDDMM.getTime()) && 
             dateDDMM.getUTCFullYear() === year && 
             dateDDMM.getUTCMonth() === part2 - 1 && 
             dateDDMM.getUTCDate() === part1 &&
             part2 >= 1 && part2 <= 12 && part1 >= 1 && part1 <= 31;
         
-        const dateMMDD = new Date(Date.UTC(year, part1 - 1, part2));
+        const dateMMDD = new DateConstructor(DateConstructor.UTC(year, part1 - 1, part2));
         const isValidMMDD = !isNaN(dateMMDD.getTime()) && 
             dateMMDD.getUTCFullYear() === year && 
             dateMMDD.getUTCMonth() === part1 - 1 && 
@@ -111,7 +117,7 @@ function parseDateWithContext(value: any, referenceDate?: string | null): string
         
         // Se entrambi sono validi e abbiamo una data di riferimento, scegli quella più logica
         if (isValidDDMM && isValidMMDD && referenceDate) {
-          const refDate = new Date(referenceDate);
+          const refDate = new DateConstructor(referenceDate);
           const refDDMM = dateDDMM.getTime();
           const refMMDD = dateMMDD.getTime();
           const refTime = refDate.getTime();
@@ -144,7 +150,7 @@ function parseDateWithContext(value: any, referenceDate?: string | null): string
 function parseDate(value: any): string | null {
   if (!value) return null;
   
-  if (value instanceof Date) {
+  if (value instanceof DateConstructor) {
     if (!isNaN(value.getTime())) {
       const year = value.getUTCFullYear();
       const month = value.getUTCMonth() + 1;
@@ -185,7 +191,7 @@ function parseDate(value: any): string | null {
       } else {
         // Entrambi <= 12: prova ENTRAMBI i formati e scegli quello valido
         // Prova prima DD/MM
-        let dateDDMM = new Date(Date.UTC(year, part2 - 1, part1));
+        let dateDDMM = new DateConstructor(DateConstructor.UTC(year, part2 - 1, part1));
         let isValidDDMM = !isNaN(dateDDMM.getTime()) && 
             dateDDMM.getUTCFullYear() === year && 
             dateDDMM.getUTCMonth() === part2 - 1 && 
@@ -193,7 +199,7 @@ function parseDate(value: any): string | null {
             part2 >= 1 && part2 <= 12 && part1 >= 1 && part1 <= 31;
         
         // Prova poi MM/DD
-        let dateMMDD = new Date(Date.UTC(year, part1 - 1, part2));
+        let dateMMDD = new DateConstructor(DateConstructor.UTC(year, part1 - 1, part2));
         let isValidMMDD = !isNaN(dateMMDD.getTime()) && 
             dateMMDD.getUTCFullYear() === year && 
             dateMMDD.getUTCMonth() === part1 - 1 && 
@@ -227,7 +233,7 @@ function parseDate(value: any): string | null {
         return null;
       }
       
-      const date = new Date(Date.UTC(year, month - 1, day));
+      const date = new DateConstructor(DateConstructor.UTC(year, month - 1, day));
       if (!isNaN(date.getTime()) && 
           date.getUTCFullYear() === year && 
           date.getUTCMonth() === month - 1 && 
@@ -237,7 +243,7 @@ function parseDate(value: any): string | null {
     }
     
     // Fallback: prova a parsare con Date nativo
-    const date = new Date(trimmed);
+    const date = new DateConstructor(trimmed);
     if (!isNaN(date.getTime())) {
       const year = date.getUTCFullYear();
       const month = date.getUTCMonth() + 1;
@@ -248,8 +254,8 @@ function parseDate(value: any): string | null {
   }
   
   if (typeof value === 'number') {
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    const excelEpoch = new DateConstructor(DateConstructor.UTC(1899, 11, 30));
+    const date = new DateConstructor(excelEpoch.getTime() + value * 86400000);
     const year = date.getUTCFullYear();
     const month = date.getUTCMonth() + 1;
     const day = date.getUTCDate();
@@ -314,7 +320,7 @@ export async function parseCSVFile(
   // Funzione di logging sicura che non può fallire
   const logEntry = (message: string, data?: any) => {
     try {
-      const timestamp = new Date().toISOString();
+      const timestamp = new DateConstructor().toISOString();
       const logLine = `[${timestamp}] ${message}`;
       detailedLog.push(logLine);
       if (data !== undefined) {
@@ -347,7 +353,7 @@ export async function parseCSVFile(
     logEntry('═══════════════════════════════════════════════════════════════');
     logEntry('File URI:', fileUri);
     logEntry('onProgress presente:', !!onProgress);
-    logEntry('Timestamp inizio:', new Date().toISOString());
+    logEntry('Timestamp inizio:', new DateConstructor().toISOString());
   } catch (e) {
     // Se anche il logging iniziale fallisce, almeno prova a salvare qualcosa
     detailedLog.push(`[ERRORE LOGGING INIZIALE] ${String(e)}`);
@@ -527,7 +533,7 @@ export async function parseCSVFile(
     // Usato per gestire gli 8 errori critici: bancali senza data o date non valide
     const ultimeDateUscitePrecedenti: (string | null)[] = Array(15).fill(null);
     
-    const baseId = Date.now();
+    const baseId = DateConstructor.now();
     
     // Contatori globali
     const globalDocCounter = { value: 0 };
@@ -810,8 +816,8 @@ export async function parseCSVFile(
                 }
               } else {
                 // Data valida: verifica se è precedente all'ingresso
-                const dataIngressoDate = new Date(dataIngresso);
-                const uscitaDataDate = new Date(uscitaData);
+                const dataIngressoDate = new DateConstructor(dataIngresso);
+                const uscitaDataDate = new DateConstructor(uscitaData);
                 if (uscitaDataDate < dataIngressoDate) {
                   // Data precedente all'ingresso: controlla se c'è una data valida nella colonna successiva
                   // TEMPORANEO: Fallback per righe con shift di colonna
@@ -889,8 +895,8 @@ export async function parseCSVFile(
           
           // Se abbiamo una data valida e bancali > 0, registra l'uscita
           if (uscitaData && bancaliUscita > 0) {
-            const dataIngressoDate = new Date(dataIngresso);
-            const uscitaDataDate = new Date(uscitaData);
+            const dataIngressoDate = new DateConstructor(dataIngresso);
+            const uscitaDataDate = new DateConstructor(uscitaData);
             
             // Validazione: data uscita precedente a data ingresso
             if (uscitaDataDate < dataIngressoDate) {
@@ -904,9 +910,9 @@ export async function parseCSVFile(
             }
             
             // Controlla se la data è futura (dopo oggi)
-            const now = new Date();
-            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-            const uscitaDateUTC = new Date(Date.UTC(uscitaDataDate.getUTCFullYear(), uscitaDataDate.getUTCMonth(), uscitaDataDate.getUTCDate(), 23, 59, 59, 999));
+            const now = new DateConstructor();
+            const today = new DateConstructor(DateConstructor.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+            const uscitaDateUTC = new DateConstructor(DateConstructor.UTC(uscitaDataDate.getUTCFullYear(), uscitaDataDate.getUTCMonth(), uscitaDataDate.getUTCDate(), 23, 59, 59, 999));
             
             if (uscitaDateUTC > today) {
               // Data futura rilevata: raccogli per mostrare alert unico alla fine
@@ -1088,7 +1094,7 @@ export async function parseCSVFile(
 
     // Genera e scarica il file di log dettagliato
     try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const timestamp = new DateConstructor().toISOString().replace(/[:.]/g, '-');
       const logFileName = `parser-debug-${timestamp}.log`;
       
       // Combina tutti i log in un unico file
@@ -1194,7 +1200,7 @@ export async function parseCSVFile(
     
     // Cerca di salvare il log anche in caso di errore
     try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const timestamp = new DateConstructor().toISOString().replace(/[:.]/g, '-');
       const logFileName = `parser-error-${timestamp}.log`;
       const errorLogContent = [
         '═══════════════════════════════════════════════════════════════',
