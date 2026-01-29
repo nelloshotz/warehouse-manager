@@ -290,7 +290,9 @@ export async function parseCSVFile(
   fileUri: string,
   onProgress?: (progress: ParseProgress) => void
 ): Promise<ExcelParseResult> {
-  console.log('🔵 [PARSER] Inizio parsing CSV, fileUri:', fileUri);
+  console.log('🔵 [PARSER] ========== INIZIO PARSING CSV ==========');
+  console.log('🔵 [PARSER] fileUri:', fileUri);
+  console.log('🔵 [PARSER] onProgress presente:', !!onProgress);
   
   const result: ExcelParseResult = {
     documents: [],
@@ -299,68 +301,89 @@ export async function parseCSVFile(
     skippedRows: 0
   };
 
+  console.log('🔵 [PARSER] Risultato inizializzato');
+
   try {
     // Fase 1: Leggi il file
+    console.log('🔵 [PARSER] Fase 1: Lettura file...');
     if (onProgress) {
+      console.log('🔵 [PARSER] Aggiornamento progresso: reading');
       onProgress({ current: 0, total: 100, stage: 'reading' });
     }
     
-    console.log('Lettura file CSV da URI:', fileUri);
+    console.log('🔵 [PARSER] Lettura file CSV da URI:', fileUri);
     
     let csvContent: string;
     
     // Se l'URI è un data URI (base64), decodifica il contenuto
+    console.log('🔵 [PARSER] Verifica tipo URI...');
     if (fileUri.startsWith('data:')) {
+      console.log('🔵 [PARSER] Data URI rilevato, decodifica base64...');
       try {
         // Estrai il base64 dal data URI
         const base64Match = fileUri.match(/base64,(.+)$/);
+        console.log('🔵 [PARSER] Base64 match trovato:', !!base64Match);
         if (base64Match && base64Match[1]) {
+          console.log('🔵 [PARSER] Lunghezza base64:', base64Match[1].length);
           // Decodifica base64 a stringa (per CSV, leggiamo direttamente come testo)
           if (typeof atob !== 'undefined') {
+            console.log('🔵 [PARSER] Usando atob (browser)...');
             // Browser/Web
             csvContent = atob(base64Match[1]);
           } else {
+            console.log('🔵 [PARSER] Usando Buffer (React Native)...');
             // React Native - usa Buffer se disponibile
             const Buffer = require('buffer').Buffer;
             csvContent = Buffer.from(base64Match[1], 'base64').toString('utf8');
           }
-          console.log('File CSV letto da data URI, dimensione:', csvContent.length);
+          console.log('✅ [PARSER] File CSV letto da data URI, dimensione:', csvContent.length);
         } else {
           throw new Error('Formato data URI non valido per CSV');
         }
       } catch (error: any) {
-        console.error('Errore decodifica data URI:', error);
+        console.error('❌ [PARSER] Errore decodifica data URI:', error);
+        console.error('❌ [PARSER] Stack:', error?.stack);
         throw new Error(`Impossibile decodificare il file CSV: ${error?.message || String(error)}`);
       }
     } else {
+      console.log('🔵 [PARSER] File URI normale, lettura con FileSystem...');
       // Leggi il file usando FileSystem
       try {
         csvContent = await FileSystem.readAsStringAsync(fileUri, {
           encoding: (FileSystem as any).EncodingType?.UTF8 || 'utf8'
         });
-        console.log('File CSV letto, dimensione:', csvContent.length);
+        console.log('✅ [PARSER] File CSV letto, dimensione:', csvContent.length);
       } catch (error: any) {
-        console.error('Errore lettura file:', error);
+        console.error('❌ [PARSER] Errore lettura file:', error);
+        console.error('❌ [PARSER] Stack:', error?.stack);
         throw new Error(`Impossibile leggere il file: ${error?.message || String(error)}`);
       }
     }
 
+    console.log('🔵 [PARSER] Fase 2: Parsing struttura...');
     if (onProgress) {
+      console.log('🔵 [PARSER] Aggiornamento progresso: parsing');
       onProgress({ current: 30, total: 100, stage: 'parsing' });
     }
 
     // Converti CSV in array di righe
+    console.log('🔵 [PARSER] Split contenuto per righe...');
     const lines = csvContent.split('\n').filter(line => line.trim().length > 0);
+    console.log('✅ [PARSER] Righe totali trovate (dopo filtro):', lines.length);
     
     if (lines.length < 2) {
+      console.error('❌ [PARSER] File CSV vuoto o senza dati');
       result.errors.push('Il file CSV sembra vuoto o non contiene dati');
       return result;
     }
 
     // La prima riga è l'header
+    console.log('🔵 [PARSER] Estrazione header...');
     const header = lines[0].split(';');
+    console.log('✅ [PARSER] Header estratto, colonne:', header.length);
     
     // Mappatura colonne CSV (indici 0-based)
+    console.log('🔵 [PARSER] Mappatura colonne CSV...');
     const verificaColIndex = 2; // Colonna 2: SCARICHI (contiene "numero - CASILLI")
     const dataIngressoIndex = 7; // Colonna 7: DATA
     const docNumIndex = 9; // Colonna 9: N° DOCUMENTO
@@ -420,6 +443,8 @@ export async function parseCSVFile(
     const globalRowCounter = { value: 0 };
     let totalSkippedRows = 0;
 
+    console.log('🔵 [PARSER] Inizializzazione strutture dati...');
+    
     // Struttura per il debug log
     const debugLog = {
       processed: [] as string[],
@@ -433,6 +458,8 @@ export async function parseCSVFile(
     // Struttura per tracciare ingressi e uscite per documento (per validazione)
     const documentiIngressi = new Map<string, { bancali: number; dataIngresso: string; tipologia: string; riga: number }[]>();
     const documentiUscite = new Map<string, Array<{ data: string; bancali: number; riga: number; uscitaNum: number }>>();
+    
+    console.log('✅ [PARSER] Strutture dati inizializzate');
 
     // Aggiungi header al debug log
     const headerLine = [
