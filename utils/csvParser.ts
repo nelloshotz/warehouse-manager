@@ -4,38 +4,29 @@ import { Document, DocumentRow } from '@/types/warehouse';
 // Cache per Platform per evitare accessi multipli
 let platformCache: { OS: string } | null | undefined = undefined;
 
-// Funzione helper per ottenere Platform in modo sicuro (lazy loading)
+// Prova a importare Platform in modo statico (compatibile con build)
+let ReactNativePlatform: { OS: string } | null = null;
+try {
+  // Import statico che funziona sia in runtime che durante il build
+  const reactNative = require('react-native');
+  if (reactNative && reactNative.Platform) {
+    ReactNativePlatform = reactNative.Platform;
+  }
+} catch (e) {
+  // Ignora errori durante l'import
+  ReactNativePlatform = null;
+}
+
+// Funzione helper per ottenere Platform in modo sicuro
 function getPlatform(): { OS: string } | null {
   // Se già in cache, restituisci il valore
   if (platformCache !== undefined) {
     return platformCache;
   }
   
-  // Prova a ottenere Platform in modo sicuro
-  try {
-    // Usa una funzione wrapper per evitare problemi di inizializzazione
-    const getRNPlatform = () => {
-      try {
-        // Prova prima con require dinamico
-        const reactNative = require('react-native');
-        if (reactNative && reactNative.Platform) {
-          return reactNative.Platform;
-        }
-      } catch (e) {
-        // Ignora errori
-      }
-      return null;
-    };
-    
-    const platform = getRNPlatform();
-    platformCache = platform;
-    return platform;
-  } catch (e: any) {
-    // In caso di errore, cache null e restituisci null
-    platformCache = null;
-    console.warn('⚠️ [PARSER] Impossibile ottenere Platform:', e?.message || String(e));
-    return null;
-  }
+  // Usa il valore importato staticamente
+  platformCache = ReactNativePlatform;
+  return platformCache;
 }
 
 export interface ExcelParseResult {
