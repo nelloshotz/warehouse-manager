@@ -622,11 +622,37 @@ export async function parseCSVFile(
       let row: string[] | null = null;
       
       try {
+        logEntry(`[RIGA ${i + 1}] Inizio parsing riga`);
+        
         // Split della riga per punto e virgola
-        row = line.split(';');
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di line.split(';')`);
+          row = line.split(';');
+          logEntry(`[RIGA ${i + 1}] Dopo line.split(';'), row.length = ${row ? row.length : 'null'}`);
+        } catch (splitError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in line.split(';'): ${splitError instanceof Error ? splitError.message : String(splitError)}`);
+          throw splitError;
+        }
         
         // Verifica colonna verifica (formato: "numero - CASILLI")
-        const verificaCol = extractText(row[verificaColIndex]);
+        let verificaCol: string;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di extractText(row[${verificaColIndex}])`);
+          verificaCol = extractText(row[verificaColIndex]);
+          logEntry(`[RIGA ${i + 1}] Dopo extractText, verificaCol = "${verificaCol}"`);
+        } catch (extractError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in extractText(verificaCol): ${extractError instanceof Error ? extractError.message : String(extractError)}`);
+          throw extractError;
+        }
+        
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di isValidVerificaColonna("${verificaCol}")`);
+          const isValidVerifica = isValidVerificaColonna(verificaCol);
+          logEntry(`[RIGA ${i + 1}] Dopo isValidVerificaColonna, risultato = ${isValidVerifica}`);
+        } catch (validError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in isValidVerificaColonna: ${validError instanceof Error ? validError.message : String(validError)}`);
+          throw validError;
+        }
         if (!isValidVerificaColonna(verificaCol)) {
           totalSkippedRows++;
           const motivo = `colonna verifica non valida "${verificaCol}" (atteso formato: "numero - CASILLI")`;
@@ -637,7 +663,25 @@ export async function parseCSVFile(
         }
         
         // Numero documento
-        const docNum = extractText(row[docNumIndex]);
+        let docNum: string;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di extractText(row[${docNumIndex}]) per docNum`);
+          docNum = extractText(row[docNumIndex]);
+          logEntry(`[RIGA ${i + 1}] Dopo extractText, docNum = "${docNum}"`);
+        } catch (docNumError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in extractText(docNum): ${docNumError instanceof Error ? docNumError.message : String(docNumError)}`);
+          throw docNumError;
+        }
+        
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di isValidDocumentNumber("${docNum}")`);
+          const isValidDoc = isValidDocumentNumber(docNum);
+          logEntry(`[RIGA ${i + 1}] Dopo isValidDocumentNumber, risultato = ${isValidDoc}`);
+        } catch (validDocError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in isValidDocumentNumber: ${validDocError instanceof Error ? validDocError.message : String(validDocError)}`);
+          throw validDocError;
+        }
+        
         if (!docNum || !isValidDocumentNumber(docNum)) {
           totalSkippedRows++;
           const motivo = `numero documento non valido "${docNum}" (colonna ${docNumIndex})`;
@@ -649,58 +693,127 @@ export async function parseCSVFile(
 
         // Crea o recupera il documento
         let document: DocumentType | undefined;
-        if (documentsMap.has(docNum)) {
-          document = documentsMap.get(docNum)!;
-        } else {
-          const newDocument: DocumentType = {
-            id: baseId + globalDocCounter.value++,
-            numero_documento: docNum
-          };
-          documentsMap.set(docNum, newDocument);
-          result.documents.push(newDocument);
-          document = newDocument;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di documentsMap.has("${docNum}")`);
+          const hasDoc = documentsMap.has(docNum);
+          logEntry(`[RIGA ${i + 1}] Dopo documentsMap.has, risultato = ${hasDoc}`);
+          
+          if (hasDoc) {
+            logEntry(`[RIGA ${i + 1}] Prima di documentsMap.get("${docNum}")`);
+            document = documentsMap.get(docNum)!;
+            logEntry(`[RIGA ${i + 1}] Dopo documentsMap.get, document.id = ${document ? document.id : 'null'}`);
+          } else {
+            logEntry(`[RIGA ${i + 1}] Creazione nuovo documento per "${docNum}"`);
+            logEntry(`[RIGA ${i + 1}] baseId = ${baseId}, globalDocCounter.value = ${globalDocCounter.value}`);
+            const newDocument: DocumentType = {
+              id: baseId + globalDocCounter.value++,
+              numero_documento: docNum
+            };
+            logEntry(`[RIGA ${i + 1}] Nuovo documento creato: id=${newDocument.id}, numero_documento="${newDocument.numero_documento}"`);
+            
+            logEntry(`[RIGA ${i + 1}] Prima di documentsMap.set("${docNum}", newDocument)`);
+            documentsMap.set(docNum, newDocument);
+            logEntry(`[RIGA ${i + 1}] Dopo documentsMap.set`);
+            
+            logEntry(`[RIGA ${i + 1}] Prima di result.documents.push(newDocument)`);
+            result.documents.push(newDocument);
+            logEntry(`[RIGA ${i + 1}] Dopo result.documents.push`);
+            
+            document = newDocument;
+            logEntry(`[RIGA ${i + 1}] Document assegnato, document.id = ${document.id}`);
+          }
+        } catch (docError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE nella gestione documento: ${docError instanceof Error ? docError.message : String(docError)}`);
+          logEntry(`[RIGA ${i + 1}] Stack trace documento:`, docError instanceof Error ? docError.stack : 'N/A');
+          throw docError;
         }
 
         // Estrai i dati della riga
         // Se la colonna DATA è vuota, usa la data dell'ultima riga processata per lo stesso documento
-        let dataIngresso = parseDate(row[dataIngressoIndex]);
+        let dataIngresso: string | null;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di parseDate(row[${dataIngressoIndex}])`);
+          dataIngresso = parseDate(row[dataIngressoIndex]);
+          logEntry(`[RIGA ${i + 1}] Dopo parseDate, dataIngresso = "${dataIngresso}"`);
+        } catch (dateError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE in parseDate: ${dateError instanceof Error ? dateError.message : String(dateError)}`);
+          throw dateError;
+        }
+        
         if (!dataIngresso) {
           // Se la colonna DATA è vuota ma abbiamo già processato una riga per questo documento, usa quella data
-          if (documentDateMap.has(docNum)) {
-            dataIngresso = documentDateMap.get(docNum)!;
-          } else {
-            // TEMPORANEO: Se non abbiamo data per questo documento, usa la data del documento precedente
-            // TODO: Commentare questa sezione quando non più necessaria
-            if (ultimaDataIngressoProcessata) {
-              dataIngresso = ultimaDataIngressoProcessata;
-              documentDateMap.set(docNum, dataIngresso);
-              // Log per debug (opzionale, può essere rimosso)
-              console.log(`⚠️ Riga ${i + 1} (doc ${docNum}): data ingresso mancante, usata data documento precedente: ${dataIngresso}`);
+          try {
+            logEntry(`[RIGA ${i + 1}] Prima di documentDateMap.has("${docNum}")`);
+            const hasDate = documentDateMap.has(docNum);
+            logEntry(`[RIGA ${i + 1}] Dopo documentDateMap.has, risultato = ${hasDate}`);
+            
+            if (hasDate) {
+              logEntry(`[RIGA ${i + 1}] Prima di documentDateMap.get("${docNum}")`);
+              dataIngresso = documentDateMap.get(docNum)!;
+              logEntry(`[RIGA ${i + 1}] Dopo documentDateMap.get, dataIngresso = "${dataIngresso}"`);
             } else {
-              // Prima riga di questo documento senza data: salta
-              totalSkippedRows++;
-              const motivo = `data ingresso non valida (colonna ${dataIngressoIndex}, valore: "${row[dataIngressoIndex]}") e nessuna data precedente per questo documento`;
-              if (debugLog) {
-                debugLog.skipped.push(`RIGA ${i + 1} - DOCUMENTO: ${docNum} - MOTIVO: ${motivo}`);
+              // TEMPORANEO: Se non abbiamo data per questo documento, usa la data del documento precedente
+              // TODO: Commentare questa sezione quando non più necessaria
+              if (ultimaDataIngressoProcessata) {
+                dataIngresso = ultimaDataIngressoProcessata;
+                documentDateMap.set(docNum, dataIngresso);
+                // Log per debug (opzionale, può essere rimosso)
+                console.log(`⚠️ Riga ${i + 1} (doc ${docNum}): data ingresso mancante, usata data documento precedente: ${dataIngresso}`);
+              } else {
+                // Prima riga di questo documento senza data: salta
+                totalSkippedRows++;
+                const motivo = `data ingresso non valida (colonna ${dataIngressoIndex}, valore: "${row[dataIngressoIndex]}") e nessuna data precedente per questo documento`;
+                if (debugLog) {
+                  debugLog.skipped.push(`RIGA ${i + 1} - DOCUMENTO: ${docNum} - MOTIVO: ${motivo}`);
+                }
+                result.errors.push(`Riga ${i + 1}: ${motivo}`);
+                continue;
               }
-              result.errors.push(`Riga ${i + 1}: ${motivo}`);
-              continue;
             }
+          } catch (dateMapError) {
+            logEntry(`[RIGA ${i + 1}] ❌ ERRORE nella gestione documentDateMap: ${dateMapError instanceof Error ? dateMapError.message : String(dateMapError)}`);
+            throw dateMapError;
           }
         } else {
           // Se la data è presente, aggiorna la mappa per questo documento
-          documentDateMap.set(docNum, dataIngresso);
-          // TEMPORANEO: Memorizza l'ultima data processata per fallback
-          // TODO: Commentare questa riga quando non più necessaria
-          ultimaDataIngressoProcessata = dataIngresso;
+          try {
+            logEntry(`[RIGA ${i + 1}] Prima di documentDateMap.set("${docNum}", "${dataIngresso}")`);
+            documentDateMap.set(docNum, dataIngresso);
+            logEntry(`[RIGA ${i + 1}] Dopo documentDateMap.set`);
+            // TEMPORANEO: Memorizza l'ultima data processata per fallback
+            // TODO: Commentare questa riga quando non più necessaria
+            ultimaDataIngressoProcessata = dataIngresso;
+            logEntry(`[RIGA ${i + 1}] ultimaDataIngressoProcessata aggiornata a "${ultimaDataIngressoProcessata}"`);
+          } catch (dateSetError) {
+            logEntry(`[RIGA ${i + 1}] ❌ ERRORE in documentDateMap.set: ${dateSetError instanceof Error ? dateSetError.message : String(dateSetError)}`);
+            throw dateSetError;
+          }
         }
 
         // Estrai bancali: gestisci esplicitamente stringhe vuote, null, undefined, "0"
-        const bancaliRaw = row[bancaliIndex];
-        const bancaliValue = bancaliRaw === null || bancaliRaw === undefined || bancaliRaw === '' 
-          ? 0 
-          : Math.max(0, Math.floor(extractNumber(bancaliRaw)));
-        const bancali = bancaliValue;
+        let bancaliRaw: any;
+        let bancaliValue: number;
+        let bancali: number;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di row[${bancaliIndex}]`);
+          bancaliRaw = row[bancaliIndex];
+          logEntry(`[RIGA ${i + 1}] Dopo row[bancaliIndex], bancaliRaw = "${bancaliRaw}" (type: ${typeof bancaliRaw})`);
+          
+          logEntry(`[RIGA ${i + 1}] Prima di extractNumber(bancaliRaw)`);
+          const extractedNum = extractNumber(bancaliRaw);
+          logEntry(`[RIGA ${i + 1}] Dopo extractNumber, risultato = ${extractedNum}`);
+          
+          bancaliValue = bancaliRaw === null || bancaliRaw === undefined || bancaliRaw === '' 
+            ? 0 
+            : Math.max(0, Math.floor(extractedNum));
+          logEntry(`[RIGA ${i + 1}] bancaliValue calcolato = ${bancaliValue}`);
+          
+          bancali = bancaliValue;
+          logEntry(`[RIGA ${i + 1}] bancali finale = ${bancali}`);
+        } catch (bancaliError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE nell'estrazione bancali: ${bancaliError instanceof Error ? bancaliError.message : String(bancaliError)}`);
+          throw bancaliError;
+        }
         
         // Se bancali = 0 (incluso stringhe vuote "", null, undefined, "0"), controlla se ci sono altre righe già processate per lo stesso documento con bancali > 0
         if (bancali === 0) {
@@ -732,34 +845,62 @@ export async function parseCSVFile(
         // Se arriviamo qui, bancali > 0: segna che questo documento ha almeno una riga valida
         documentHasValidRows.set(docNum, true);
         
-        // Traccia ingresso per validazione
-        if (!documentiIngressi.has(docNum)) {
-          documentiIngressi.set(docNum, []);
+        // Valida e normalizza la tipologia (PRIMA di usarla)
+        let tipologia: string;
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di extractText(row[${tipologiaIndex}]) per tipologia`);
+          const tipologiaRaw = row[tipologiaIndex] 
+            ? extractText(row[tipologiaIndex]).trim().toUpperCase()
+            : '';
+          logEntry(`[RIGA ${i + 1}] Dopo extractText, tipologiaRaw = "${tipologiaRaw}"`);
+          
+          if (!tipologiaRaw || tipologiaRaw.length === 0) {
+            tipologia = '80X120'; // Default
+            logEntry(`[RIGA ${i + 1}] tipologia impostata a default: "${tipologia}"`);
+          } else {
+            tipologia = tipologiaRaw.replace(/\s+/g, '').replace(/[xX]/g, 'X');
+            if (tipologia !== '100X120' && tipologia !== '80X120') {
+              tipologia = '80X120';
+            }
+            logEntry(`[RIGA ${i + 1}] tipologia normalizzata: "${tipologia}"`);
+          }
+        } catch (tipologiaError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE nell'estrazione tipologia: ${tipologiaError instanceof Error ? tipologiaError.message : String(tipologiaError)}`);
+          throw tipologiaError;
         }
-        documentiIngressi.get(docNum)!.push({
-          bancali: bancali,
-          dataIngresso: dataIngresso,
-          tipologia: tipologia,
-          riga: i + 1
-        });
+        
+        // Traccia ingresso per validazione
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di documentiIngressi.has("${docNum}")`);
+          if (!documentiIngressi.has(docNum)) {
+            logEntry(`[RIGA ${i + 1}] Prima di documentiIngressi.set("${docNum}", [])`);
+            documentiIngressi.set(docNum, []);
+            logEntry(`[RIGA ${i + 1}] Dopo documentiIngressi.set`);
+          }
+          logEntry(`[RIGA ${i + 1}] Prima di documentiIngressi.get("${docNum}").push(...)`);
+          documentiIngressi.get(docNum)!.push({
+            bancali: bancali,
+            dataIngresso: dataIngresso,
+            tipologia: tipologia,
+            riga: i + 1
+          });
+          logEntry(`[RIGA ${i + 1}] Dopo documentiIngressi.get().push`);
+        } catch (ingressiError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE nella gestione documentiIngressi: ${ingressiError instanceof Error ? ingressiError.message : String(ingressiError)}`);
+          throw ingressiError;
+        }
         
         // Inizializza tracciamento uscite per questo documento
-        if (!documentiUscite.has(docNum)) {
-          documentiUscite.set(docNum, []);
-        }
-
-        // Valida e normalizza la tipologia
-        let tipologia = row[tipologiaIndex] 
-          ? extractText(row[tipologiaIndex]).trim().toUpperCase()
-          : '';
-        
-        if (!tipologia || tipologia.length === 0) {
-          tipologia = '80X120'; // Default
-        } else {
-          tipologia = tipologia.replace(/\s+/g, '').replace(/[xX]/g, 'X');
-          if (tipologia !== '100X120' && tipologia !== '80X120') {
-            tipologia = '80X120';
+        try {
+          logEntry(`[RIGA ${i + 1}] Prima di documentiUscite.has("${docNum}")`);
+          if (!documentiUscite.has(docNum)) {
+            logEntry(`[RIGA ${i + 1}] Prima di documentiUscite.set("${docNum}", [])`);
+            documentiUscite.set(docNum, []);
+            logEntry(`[RIGA ${i + 1}] Dopo documentiUscite.set`);
           }
+        } catch (usciteError) {
+          logEntry(`[RIGA ${i + 1}] ❌ ERRORE nella gestione documentiUscite: ${usciteError instanceof Error ? usciteError.message : String(usciteError)}`);
+          throw usciteError;
         }
         
         const note = extractText(row[noteIndex]);
