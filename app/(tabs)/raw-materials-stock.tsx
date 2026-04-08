@@ -202,10 +202,14 @@ export default function RawMaterialsStockScreen() {
         {reportError && <Text style={styles.errorText}>{reportError}</Text>}
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.headerText, styles.nameColumn]}>Materia Prima</Text>
+            <Text style={[styles.headerText, styles.qtyColumn]}>Quantità</Text>
+          </View>
           {reportRows.map((row) => (
             <View key={row.nome_materia_prima} style={styles.row}>
-              <Text style={styles.rowName}>{row.nome_materia_prima}</Text>
-              <Text style={[styles.rowQty, row.giacenza_bancali === 0 && styles.rowQtyZero]}>
+              <Text style={[styles.rowName, styles.nameColumn]}>{row.nome_materia_prima}</Text>
+              <Text style={[styles.rowQty, styles.qtyColumn, row.giacenza_bancali === 0 && styles.rowQtyZero]}>
                 {row.giacenza_bancali}
               </Text>
             </View>
@@ -282,22 +286,47 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+    alignItems: "center",
+  },
+  tableHeader: {
+    width: "100%",
+    maxWidth: 780,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  headerText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.darkGray,
+    textAlign: "center",
+  },
+  nameColumn: {
+    flex: 1,
+    textAlign: "center",
+  },
+  qtyColumn: {
+    width: 120,
+    textAlign: "center",
   },
   row: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     backgroundColor: colors.card,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
+    width: "100%",
+    maxWidth: 780,
+    gap: 12,
   },
   rowName: {
-    flex: 1,
     fontSize: 14,
     color: colors.text,
-    marginRight: 12,
   },
   rowQty: {
     fontSize: 14,
