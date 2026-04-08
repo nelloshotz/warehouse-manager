@@ -19,18 +19,27 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+interface MenuItem {
+  title: string;
+  icon: any;
+  route: string;
+  color: string;
+  disabled?: boolean;
+}
+
 export default function AppLayout({ children }: AppLayoutProps) {
   const [menuVisible, setMenuVisible] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { title: "Dashboard", icon: Database, route: "/(tabs)", color: colors.primary },
     { title: "Ingressi", icon: ArrowDownToLine, route: "/(tabs)/entries", color: colors.info },
     { title: "Uscite", icon: ArrowUpFromLine, route: "/(tabs)/exits", color: colors.warning },
     { title: "Stoccaggio", icon: Clock, route: "/(tabs)/storage", color: colors.secondary },
     { title: "Documenti", icon: FileText, route: "/(tabs)/documents", color: colors.primary },
     { title: "Report Mensili", icon: FileBarChart, route: "/(tabs)/reports", color: colors.primary },
+    { title: "Giacenza Materie Prime", icon: FileBarChart, route: "/(tabs)/raw-materials-stock", color: colors.primary },
     { title: "Panoramica Annuale", icon: TrendingUp, route: "/(tabs)/yearly", color: colors.primary },
     { title: "Impostazioni", icon: Settings, route: "/(tabs)/settings", color: colors.darkGray },
   ];
@@ -115,7 +124,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       styles.menuItem,
                       active && styles.menuItemActive
                     ]}
-                    onPress={() => navigateTo(item.route)}
+                    onPress={() => !item.disabled && navigateTo(item.route)}
                   >
                     <Icon size={20} color={active ? item.color : colors.darkGray} />
                     <View style={{ width: 12 }} />

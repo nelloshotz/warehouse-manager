@@ -7,6 +7,7 @@ export interface DocumentRow {
   id: number;
   documento_id: number;
   data_ingresso: string;
+  descrizione_materia_prima?: string;
   numero_bancali_ingresso: number;
   tipologia_bancali_ingresso: string;
   uscite: {
