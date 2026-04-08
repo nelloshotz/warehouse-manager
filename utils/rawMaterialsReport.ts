@@ -1,5 +1,3 @@
-import { DocumentRow } from "@/types/warehouse";
-
 export interface RawMaterialRow {
   nome_materia_prima: string;
   giacenza_bancali: number;
@@ -15,8 +13,68 @@ function getGroupLetter(name: string): string {
   return /[A-Z]/.test(first) ? first : "#";
 }
 
-export function buildRawMaterialsReport(
-  documentRows: DocumentRow[],
+function parseCsvLine(line: string, delimiter = ";"): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === delimiter && !inQuotes) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+
+    current += ch;
+  }
+
+  out.push(current);
+  return out;
+}
+
+function toNumber(value: string): number {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return 0;
+
+  const normalized = trimmed
+    .replace(/\./g, "")
+    .replace(",", ".")
+    .replace(/[^\d.-]/g, "");
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseDate(value: string): Date | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!match) return null;
+
+  const month = Number.parseInt(match[1], 10);
+  const day = Number.parseInt(match[2], 10);
+  let year = Number.parseInt(match[3], 10);
+  if (year < 100) year = year <= 50 ? 2000 + year : 1900 + year;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function buildRawMaterialsReportFromCsv(
+  csvText: string,
   products: string[],
   referenceDate: Date = new Date()
 ): RawMaterialRow[] {
@@ -38,28 +96,39 @@ export function buildRawMaterialsReport(
   });
 
   const totals = new Array(products.length).fill(0);
+  const lines = String(csvText || "").split(/\r?\n/).filter((line) => line.length > 0);
+  if (lines.length < 2) {
+    return products.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 }));
+  }
 
-  documentRows.forEach((row) => {
-    const descrizione = normalizeName(row.descrizione_materia_prima || "");
-    if (!descrizione) return;
+  // indici CSV (0-based), separati dal parser principale per non impattarlo
+  const DESCRIZIONE_INDEX = 14;
+  const INGRESSO_BANCALI_INDEX = 19;
+  const USCITE_DATE_COLUMNS = [27, 33, 39, 45, 51, 57, 63, 69, 75, 81, 87, 93, 99, 105, 111];
+  const USCITE_BANCALI_COLUMNS = [26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110];
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const row = parseCsvLine(lines[i], ";");
+    const descrizione = normalizeName(row[DESCRIZIONE_INDEX] || "");
+    if (!descrizione) continue;
 
     const productPos = productIndexMap.get(descrizione);
-    if (productPos === undefined) return;
+    if (productPos === undefined) continue;
 
-    const ingresso = Math.max(0, Number(row.numero_bancali_ingresso) || 0);
-    if (ingresso <= 0) return;
+    const ingresso = Math.max(0, toNumber(row[INGRESSO_BANCALI_INDEX] || ""));
+    if (ingresso <= 0) continue;
 
     let usciteValide = 0;
-    Object.values(row.uscite || {}).forEach((uscita) => {
-      if (!uscita?.data || uscita.bancali <= 0) return;
-      const exitDate = new Date(uscita.data);
-      if (Number.isNaN(exitDate.getTime())) return;
-      if (exitDate <= today) usciteValide += uscita.bancali;
-    });
+    for (let j = 0; j < USCITE_DATE_COLUMNS.length; j += 1) {
+      const uscitaDate = parseDate(row[USCITE_DATE_COLUMNS[j]] || "");
+      const uscitaBancali = toNumber(row[USCITE_BANCALI_COLUMNS[j]] || "");
+      if (!uscitaDate || uscitaBancali <= 0) continue;
+      if (uscitaDate <= today) usciteValide += uscitaBancali;
+    }
 
     const giacenzaRiga = Math.max(0, ingresso - usciteValide);
     totals[productPos] += giacenzaRiga;
-  });
+  }
 
   return products
     .map((nome, idx) => ({

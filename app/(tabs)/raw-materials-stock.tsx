@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,11 +11,12 @@ import {
 } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 import AppLayout from "@/components/AppLayout";
 import { colors } from "@/constants/colors";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { Download, FileBarChart } from "lucide-react-native";
-import { buildRawMaterialsReport } from "@/utils/rawMaterialsReport";
+import { Download, FileBarChart, RefreshCw } from "lucide-react-native";
+import { buildRawMaterialsReportFromCsv, RawMaterialRow } from "@/utils/rawMaterialsReport";
 
 const productsData = require("@/prodotti.json") as { prodotti: string[] };
 
@@ -88,13 +89,53 @@ function buildPaginatedPdfHtml(
 }
 
 export default function RawMaterialsStockScreen() {
-  const { documentRows } = useWarehouseStore();
+  const { uploadedFiles } = useWarehouseStore();
   const [exporting, setExporting] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportRows, setReportRows] = useState<RawMaterialRow[]>([]);
+  const [reportError, setReportError] = useState<string | null>(null);
 
-  const reportRows = useMemo(() => {
+  const latestCsvFile = useMemo(() => {
+    const csvFiles = uploadedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+    if (csvFiles.length === 0) return null;
+    return [...csvFiles].sort(
+      (a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+    )[0];
+  }, [uploadedFiles]);
+
+  const loadReport = async () => {
     const products = Array.isArray(productsData.prodotti) ? productsData.prodotti : [];
-    return buildRawMaterialsReport(documentRows, products);
-  }, [documentRows]);
+    if (!latestCsvFile?.uri) {
+      setReportRows(products.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportError("Nessun CSV caricato. Carica prima un file CSV dalla dashboard.");
+      return;
+    }
+
+    try {
+      setLoadingReport(true);
+      setReportError(null);
+
+      let csvText = "";
+      if (Platform.OS === "web") {
+        const response = await fetch(latestCsvFile.uri);
+        csvText = await response.text();
+      } else {
+        csvText = await FileSystem.readAsStringAsync(latestCsvFile.uri);
+      }
+
+      const rows = buildRawMaterialsReportFromCsv(csvText, products);
+      setReportRows(rows);
+    } catch (error: any) {
+      setReportRows(products.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportError(`Errore lettura file CSV: ${error?.message || "errore sconosciuto"}`);
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReport();
+  }, [latestCsvFile?.id]);
 
   const handleDownloadPdf = async () => {
     try {
@@ -136,15 +177,29 @@ export default function RawMaterialsStockScreen() {
             <FileBarChart size={20} color={colors.primary} />
             <Text style={styles.title}>Giacenza Materie Prime</Text>
           </View>
-          <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPdf} disabled={exporting}>
-            {exporting ? (
-              <ActivityIndicator size="small" color={colors.card} />
-            ) : (
-              <Download size={16} color={colors.card} />
-            )}
-            <Text style={styles.downloadButtonText}>{exporting ? "Creo PDF..." : "Scarica PDF"}</Text>
-          </TouchableOpacity>
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.refreshButton} onPress={loadReport} disabled={loadingReport}>
+              {loadingReport ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <RefreshCw size={16} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPdf} disabled={exporting || loadingReport}>
+              {exporting ? (
+                <ActivityIndicator size="small" color={colors.card} />
+              ) : (
+                <Download size={16} color={colors.card} />
+              )}
+              <Text style={styles.downloadButtonText}>{exporting ? "Creo PDF..." : "Scarica PDF"}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {latestCsvFile && (
+          <Text style={styles.sourceText}>Sorgente CSV: {latestCsvFile.name}</Text>
+        )}
+        {reportError && <Text style={styles.errorText}>{reportError}</Text>}
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {reportRows.map((row) => (
@@ -192,6 +247,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
+  },
   downloadButtonText: {
     color: colors.card,
     fontSize: 13,
@@ -199,6 +269,16 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  sourceText: {
+    fontSize: 12,
+    color: colors.darkGray,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.warning,
+    marginBottom: 10,
   },
   scrollContent: {
     paddingBottom: 20,

@@ -484,7 +484,6 @@ export async function parseCSVFile(
     const verificaColIndex = 2; // Colonna 2: SCARICHI (contiene "numero - CASILLI")
     const dataIngressoIndex = 7; // Colonna 7: DATA
     const docNumIndex = 9; // Colonna 9: N° DOCUMENTO
-    const descrizioneIndex = 14; // Colonna 14: DESCRIZIONE (materia prima)
     const bancaliIndex = 19; // Colonna 19: Q.TA PLT
     const tipologiaIndex = 21; // Colonna 21: TIPOLOGIA BANCALI
     const noteIndex = 22; // Colonna 22: NOTE
@@ -508,7 +507,6 @@ export async function parseCSVFile(
       verificaColIndex: `${verificaColIndex} (verifica - formato: numero - CASILLI)`,
       dataIngressoIndex: `${dataIngressoIndex} (data ingresso)`,
       docNumIndex: `${docNumIndex} (numero documento)`,
-      descrizioneIndex: `${descrizioneIndex} (descrizione materia prima)`,
       bancaliIndex: `${bancaliIndex} (numero bancali ingresso)`,
       tipologiaIndex: `${tipologiaIndex} (tipologia bancali)`,
       noteIndex: `${noteIndex} (note)`,
@@ -1138,7 +1136,6 @@ export async function parseCSVFile(
           id: baseId + 1000000 + globalRowCounter.value++,
           documento_id: document.id,
           data_ingresso: dataIngresso,
-          descrizione_materia_prima: String(row[descrizioneIndex] || '').trim(),
           numero_bancali_ingresso: bancali,
           tipologia_bancali_ingresso: tipologia,
           uscite: uscite,
