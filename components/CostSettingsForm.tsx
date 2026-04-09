@@ -108,6 +108,7 @@ export default function CostSettingsForm() {
         />
       </View>
       
+      {/* Campo momentaneamente disattivato: Colonne Uscita
       <View style={styles.formGroup}>
         <Text style={styles.label}>Colonne Uscita</Text>
         <View style={styles.counterContainer}>
@@ -128,6 +129,7 @@ export default function CostSettingsForm() {
           </TouchableOpacity>
         </View>
       </View>
+      */}
       
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Save size={18} color={colors.card} />
