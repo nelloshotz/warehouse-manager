@@ -43,7 +43,7 @@ export default function CostSettingsForm() {
       <Text style={styles.title}>Impostazioni Costi</Text>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Ingresso Ambient (€/ PLT)</Text>
+        <Text style={styles.label}>Costo Ingresso Ambient (€ / PLT)</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_ingresso}
@@ -54,7 +54,7 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Uscita Ambient (€/ PLT)</Text>
+        <Text style={styles.label}>Costo Uscita Ambient (€ / PLT)</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_uscita}
@@ -76,7 +76,7 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Ingresso Frozen (€/ PLT)</Text>
+        <Text style={styles.label}>Costo Ingresso Frozen (€ / PLT)</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_congelato_ingresso}
@@ -87,7 +87,7 @@ export default function CostSettingsForm() {
       </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Uscita Frozen (€/ PLT)</Text>
+        <Text style={styles.label}>Costo Uscita Frozen (€ / PLT)</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_congelato_uscita}
