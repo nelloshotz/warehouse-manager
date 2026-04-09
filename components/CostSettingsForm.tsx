@@ -12,7 +12,9 @@ export default function CostSettingsForm() {
     costo_ingresso: costSettings.costo_ingresso.toString(),
     costo_uscita: costSettings.costo_uscita.toString(),
     costo_storage: costSettings.costo_storage.toString(),
-    costo_congelato: costSettings.costo_congelato.toString(),
+    costo_congelato_ingresso: costSettings.costo_congelato_ingresso.toString(),
+    costo_congelato_uscita: costSettings.costo_congelato_uscita.toString(),
+    costo_congelato_storage: costSettings.costo_congelato_storage.toString(),
   });
 
   const handleChange = (name: string, value: string) => {
@@ -27,7 +29,12 @@ export default function CostSettingsForm() {
       costo_ingresso: parseFloat(formValues.costo_ingresso) || costSettings.costo_ingresso,
       costo_uscita: parseFloat(formValues.costo_uscita) || costSettings.costo_uscita,
       costo_storage: parseFloat(formValues.costo_storage) || costSettings.costo_storage,
-      costo_congelato: parseFloat(formValues.costo_congelato) || costSettings.costo_congelato,
+      costo_congelato_ingresso:
+        parseFloat(formValues.costo_congelato_ingresso) || costSettings.costo_congelato_ingresso,
+      costo_congelato_uscita:
+        parseFloat(formValues.costo_congelato_uscita) || costSettings.costo_congelato_uscita,
+      costo_congelato_storage:
+        parseFloat(formValues.costo_congelato_storage) || costSettings.costo_congelato_storage,
     });
   };
 
@@ -69,13 +76,35 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Congelato (€)</Text>
+        <Text style={styles.label}>Costo Congelato Ingresso (€)</Text>
         <TextInput
           style={styles.input}
-          value={formValues.costo_congelato}
-          onChangeText={(value) => handleChange("costo_congelato", value)}
+          value={formValues.costo_congelato_ingresso}
+          onChangeText={(value) => handleChange("costo_congelato_ingresso", value)}
           keyboardType="numeric"
-          placeholder="Costo congelato"
+          placeholder="Costo congelato ingresso"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Costo Congelato Uscita (€)</Text>
+        <TextInput
+          style={styles.input}
+          value={formValues.costo_congelato_uscita}
+          onChangeText={(value) => handleChange("costo_congelato_uscita", value)}
+          keyboardType="numeric"
+          placeholder="Costo congelato uscita"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Costo Congelato Stoccaggio (€ al giorno)</Text>
+        <TextInput
+          style={styles.input}
+          value={formValues.costo_congelato_storage}
+          onChangeText={(value) => handleChange("costo_congelato_storage", value)}
+          keyboardType="numeric"
+          placeholder="Costo congelato stoccaggio"
         />
       </View>
       

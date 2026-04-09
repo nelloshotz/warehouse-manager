@@ -399,7 +399,7 @@ export const useWarehouseStore = create<WarehouseState>()(
         // Calcola l'equivalenza totale (non per riga singola)
         // IMPORTANTE: Calcola separatamente normali e congelati, anche se sono nello stesso documento
         // Normali: costo_ingresso (3.5€)
-        // Congelati: costo_congelato (5.0€)
+        // Congelati: costo_congelato_ingresso
         const equiv100x120 = totalBancali100x120 > 0 ? calculateEquivalence(totalBancali100x120) : 0;
         const equiv80x120 = totalBancali80x120;
         const equivCongelato100x120 = totalBancaliCongelato100x120 > 0 
@@ -409,7 +409,9 @@ export const useWarehouseStore = create<WarehouseState>()(
         
         // Calcola i costi separatamente per normali e congelati
         const costiNormali = equiv100x120 * costSettings.costo_ingresso + equiv80x120 * costSettings.costo_ingresso;
-        const costiCongelati = (equivCongelato100x120 + equivCongelato80x120) * costSettings.costo_congelato;
+        const costiCongelati =
+          (equivCongelato100x120 + equivCongelato80x120) *
+          costSettings.costo_congelato_ingresso;
         costiIngresso = costiNormali + costiCongelati;
         
         // Equivalenza totale (solo per visualizzazione, non per calcolo costi)
@@ -437,7 +439,7 @@ export const useWarehouseStore = create<WarehouseState>()(
                 equivalenzaUscita = is100x120 
                   ? calculateEquivalence(uscita.bancali)
                   : uscita.bancali;
-                costiUscita += equivalenzaUscita * costSettings.costo_congelato;
+                costiUscita += equivalenzaUscita * costSettings.costo_congelato_uscita;
               } else if (is100x120) {
                 equivalenzaUscita = calculateEquivalence(uscita.bancali);
                 costiUscita += equivalenzaUscita * costSettings.costo_uscita;
@@ -491,7 +493,10 @@ export const useWarehouseStore = create<WarehouseState>()(
                   }
                   
                   // Calcola costo stoccaggio per questo periodo
-                  costiStoccaggio += giorni * equivalenzaStoccaggio * costSettings.costo_storage;
+                  const storageRate = isCongelato
+                    ? costSettings.costo_congelato_storage
+                    : costSettings.costo_storage;
+                  costiStoccaggio += giorni * equivalenzaStoccaggio * storageRate;
                 }
                 
                 // Aggiorna stock dopo l'uscita
@@ -511,7 +516,10 @@ export const useWarehouseStore = create<WarehouseState>()(
                     equivalenzaStoccaggio = stockAttuale;
                   }
                   
-                  costiStoccaggio += giorniRimanenti * equivalenzaStoccaggio * costSettings.costo_storage;
+                  const storageRate = isCongelato
+                    ? costSettings.costo_congelato_storage
+                    : costSettings.costo_storage;
+                  costiStoccaggio += giorniRimanenti * equivalenzaStoccaggio * storageRate;
                 }
               }
             } else {
@@ -525,7 +533,10 @@ export const useWarehouseStore = create<WarehouseState>()(
                 equivalenzaStoccaggio = row.numero_bancali_ingresso;
               }
               
-              costiStoccaggio += giorniStoccaggio * equivalenzaStoccaggio * costSettings.costo_storage;
+              const storageRate = isCongelato
+                ? costSettings.costo_congelato_storage
+                : costSettings.costo_storage;
+              costiStoccaggio += giorniStoccaggio * equivalenzaStoccaggio * storageRate;
             }
           }
         });
@@ -813,7 +824,7 @@ export const useWarehouseStore = create<WarehouseState>()(
             
             // IMPORTANTE: Calcola separatamente normali e congelati, anche se sono nello stesso documento
             // Normali: costo_ingresso (3.5€)
-            // Congelati: costo_congelato (5.0€)
+            // Congelati: costo_congelato_ingresso
             
             // Calcola equivalenze per normali
             docEquivalenza100x120 = docData.bancali100x120 > 0 
@@ -831,7 +842,8 @@ export const useWarehouseStore = create<WarehouseState>()(
             // Calcola i costi separatamente per normali e congelati
             const costiNormali = docEquivalenza100x120 * costSettings.costo_ingresso 
               + docEquivalenza80x120 * costSettings.costo_ingresso;
-            const costiCongelati = docEquivalenzaCongelato * costSettings.costo_congelato;
+            const costiCongelati =
+              docEquivalenzaCongelato * costSettings.costo_congelato_ingresso;
             docCostoIngresso = costiNormali + costiCongelati;
             
             // Aggiungi al totale del mese
@@ -860,7 +872,7 @@ export const useWarehouseStore = create<WarehouseState>()(
               console.log(`  - Bancali 80x120: ${refDocData.bancali80x120}`);
               console.log(`  - Bancali congelato: ${refDocData.bancaliCongelato}`);
               console.log(`  - Costo ingresso documento 2025/7599: €${(refDocData.hasCongelato ? 
-                ((refDocData.bancaliCongelato100x120 > 0 ? calculateEquivalence(refDocData.bancaliCongelato100x120) : 0) + refDocData.bancaliCongelato80x120) * costSettings.costo_congelato :
+                ((refDocData.bancaliCongelato100x120 > 0 ? calculateEquivalence(refDocData.bancaliCongelato100x120) : 0) + refDocData.bancaliCongelato80x120) * costSettings.costo_congelato_ingresso :
                 (refDocData.bancali100x120 > 0 ? calculateEquivalence(refDocData.bancali100x120) : 0) * costSettings.costo_ingresso + refDocData.bancali80x120 * costSettings.costo_ingresso).toFixed(2)}`);
             }
           }
@@ -941,11 +953,11 @@ export const useWarehouseStore = create<WarehouseState>()(
                 ? calculateEquivalence(uscita.bancali)
                 : uscita.bancali;
               summary.equivalenza_congelato += equivalenzaUscita;
-              costoUscita = equivalenzaUscita * costSettings.costo_congelato;
+              costoUscita = equivalenzaUscita * costSettings.costo_congelato_uscita;
               summary.costi_uscita += costoUscita;
               summary.costi_uscita_congelati += costoUscita;
               if (isRefRow) {
-                console.log(`  - Equivalenza: ${equivalenzaUscita} (costo congelato: €${costSettings.costo_congelato})`);
+                console.log(`  - Equivalenza: ${equivalenzaUscita} (costo congelato uscita: €${costSettings.costo_congelato_uscita})`);
                 console.log(`  - Costo uscita questa riga: €${costoUscita.toFixed(2)}`);
               }
             } else if (is100x120) {
@@ -1199,13 +1211,16 @@ export const useWarehouseStore = create<WarehouseState>()(
             // Calcola il costo di stoccaggio utilizzando la formula corretta:
             // (Numero di bancali equivalenti × Costo di stoccaggio per bancale) × Numero di giorni in stoccaggio
             // Stiamo utilizzando i valori di stock giornalieri per ottenere costi accurati
-            const storageCost = totalPalletDays * costSettings.costo_storage;
+            const storageRate = row.note.toUpperCase().includes("CONGELATO")
+              ? costSettings.costo_congelato_storage
+              : costSettings.costo_storage;
+            const storageCost = totalPalletDays * storageRate;
             
             if (isRefRow) {
               console.log(`    - Stock medio mese: ${avgStock.toFixed(2)} bancali equivalenti`);
               console.log(`    - Giorni totali: ${daysActive}`);
               console.log(`    - Totale giorni-bancale: ${totalPalletDays.toFixed(2)}`);
-              console.log(`    - Costo storage questo mese: €${storageCost.toFixed(2)} (${totalPalletDays.toFixed(2)} × €${costSettings.costo_storage})`);
+              console.log(`    - Costo storage questo mese: €${storageCost.toFixed(2)} (${totalPalletDays.toFixed(2)} × €${storageRate})`);
             }
             
             // Aggiorna il riepilogo
@@ -1315,8 +1330,9 @@ export const useWarehouseStore = create<WarehouseState>()(
           return 0;
         }
         
-        // Calcola lo stock attuale (oggi) invece di usare stock_medio
-        let currentActualStock = 0;
+        // Calcola lo stock attuale (oggi) separando ambient e congelato
+        let currentAmbientStock = 0;
+        let currentFrozenStock = 0;
         
         documentRows.forEach(row => {
           const inDate = new Date(row.data_ingresso);
@@ -1334,6 +1350,7 @@ export const useWarehouseStore = create<WarehouseState>()(
           }
           
           const is100x120 = row.tipologia_bancali_ingresso.toUpperCase() === '100X120';
+          const isCongelato = row.note.toUpperCase().includes('CONGELATO');
           let palletsRemaining = row.numero_bancali_ingresso;
           
           // Sottrai tutte le uscite avvenute fino ad oggi (incluso oggi)
@@ -1357,10 +1374,14 @@ export const useWarehouseStore = create<WarehouseState>()(
           
           // Calcola l'equivalenza dei bancali rimanenti
           if (palletsRemaining > 0) {
-            if (is100x120) {
-              currentActualStock += calculateEquivalence(palletsRemaining);
+            const equivalentPallets = is100x120
+              ? calculateEquivalence(palletsRemaining)
+              : palletsRemaining; // 1:1 per 80x120
+
+            if (isCongelato) {
+              currentFrozenStock += equivalentPallets;
             } else {
-              currentActualStock += palletsRemaining; // 1:1 per 80x120
+              currentAmbientStock += equivalentPallets;
             }
           }
         });
@@ -1369,9 +1390,11 @@ export const useWarehouseStore = create<WarehouseState>()(
         const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
         const daysRemaining = daysInMonth - today.getUTCDate();
         
-        // Calcola il costo di stoccaggio previsto per i giorni rimanenti utilizzando lo stock attuale:
-        // (Numero di bancali equivalenti attuali × Costo di stoccaggio per bancale) × Numero di giorni rimanenti
-        return currentActualStock * costSettings.costo_storage * daysRemaining;
+        // Calcola il costo previsto separando tariffa ambient e congelato
+        const ambientCost = currentAmbientStock * costSettings.costo_storage * daysRemaining;
+        const frozenCost =
+          currentFrozenStock * costSettings.costo_congelato_storage * daysRemaining;
+        return ambientCost + frozenCost;
       },
       
       // Salva i dati nello store come JSON (database principale) - su file system

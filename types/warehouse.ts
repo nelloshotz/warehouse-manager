@@ -23,7 +23,9 @@ export interface CostSettings {
   costo_ingresso: number;
   costo_uscita: number;
   costo_storage: number;
-  costo_congelato: number;
+  costo_congelato_ingresso: number;
+  costo_congelato_uscita: number;
+  costo_congelato_storage: number;
 }
 
 export interface EntrySummary {

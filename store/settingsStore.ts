@@ -34,6 +34,32 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "warehouse-settings",
       storage: createJSONStorage(() => AsyncStorage),
+      version: 2,
+      migrate: (persistedState: any) => {
+        if (!persistedState) return persistedState;
+
+        const oldCostSettings = persistedState.costSettings || {};
+        const legacyCongelato = oldCostSettings.costo_congelato;
+
+        return {
+          ...persistedState,
+          costSettings: {
+            ...DEFAULT_COST_SETTINGS,
+            ...oldCostSettings,
+            costo_congelato_ingresso:
+              oldCostSettings.costo_congelato_ingresso ??
+              legacyCongelato ??
+              DEFAULT_COST_SETTINGS.costo_congelato_ingresso,
+            costo_congelato_uscita:
+              oldCostSettings.costo_congelato_uscita ??
+              legacyCongelato ??
+              DEFAULT_COST_SETTINGS.costo_congelato_uscita,
+            costo_congelato_storage:
+              oldCostSettings.costo_congelato_storage ??
+              DEFAULT_COST_SETTINGS.costo_congelato_storage,
+          },
+        };
+      },
     }
   )
 );
