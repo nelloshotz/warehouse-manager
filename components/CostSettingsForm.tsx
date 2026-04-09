@@ -43,7 +43,7 @@ export default function CostSettingsForm() {
       <Text style={styles.title}>Impostazioni Costi</Text>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Ingresso (€)</Text>
+        <Text style={styles.label}>Costo Ingresso Ambient</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_ingresso}
@@ -54,7 +54,7 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Uscita (€)</Text>
+        <Text style={styles.label}>Costo Uscita Ambient</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_uscita}
@@ -65,7 +65,7 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Stoccaggio (€ al giorno)</Text>
+        <Text style={styles.label}>Costo Storage Ambient</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_storage}
@@ -76,7 +76,7 @@ export default function CostSettingsForm() {
       </View>
       
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Congelato Ingresso (€)</Text>
+        <Text style={styles.label}>Costo Ingresso Frozen</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_congelato_ingresso}
@@ -87,7 +87,7 @@ export default function CostSettingsForm() {
       </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Congelato Uscita (€)</Text>
+        <Text style={styles.label}>Costo Uscita Frozen</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_congelato_uscita}
@@ -98,7 +98,7 @@ export default function CostSettingsForm() {
       </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Costo Congelato Stoccaggio (€ al giorno)</Text>
+        <Text style={styles.label}>Costo Storage Frozen</Text>
         <TextInput
           style={styles.input}
           value={formValues.costo_congelato_storage}
