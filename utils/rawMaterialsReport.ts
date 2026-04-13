@@ -1,3 +1,5 @@
+import { RAW_MATERIALS_REPORT_CSV_COLUMNS } from "@/constants/settings";
+
 export interface RawMaterialRow {
   nome_materia_prima: string;
   giacenza_bancali: number;
@@ -73,10 +75,19 @@ function parseDate(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/**
+ * Scorre le righe CSV in ordine (dopo l’intestazione). Per ogni riga calcola la
+ * giacenza bancali come per i pallet (ingresso meno uscite con data ≤ data di
+ * riferimento). Se il testo nella colonna prodotto coincide (normalizzato) con
+ * una voce dell’elenco `products`, somma quella giacenza al totale di quella
+ * materia; righe diverse con la stessa materia si accumulano, cambio materia
+ * aggiorna un altro accumulatore.
+ */
 export function buildRawMaterialsReportFromCsv(
   csvText: string,
   products: string[],
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  descrizioneColumnIndex: number = RAW_MATERIALS_REPORT_CSV_COLUMNS.descrizione
 ): RawMaterialRow[] {
   const today = new Date(
     Date.UTC(
@@ -102,14 +113,13 @@ export function buildRawMaterialsReportFromCsv(
   }
 
   // indici CSV (0-based), separati dal parser principale per non impattarlo
-  const DESCRIZIONE_INDEX = 14;
   const INGRESSO_BANCALI_INDEX = 19;
   const USCITE_DATE_COLUMNS = [27, 33, 39, 45, 51, 57, 63, 69, 75, 81, 87, 93, 99, 105, 111];
   const USCITE_BANCALI_COLUMNS = [26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110];
 
   for (let i = 1; i < lines.length; i += 1) {
     const row = parseCsvLine(lines[i], ";");
-    const descrizione = normalizeName(row[DESCRIZIONE_INDEX] || "");
+    const descrizione = normalizeName(row[descrizioneColumnIndex] || "");
     if (!descrizione) continue;
 
     const productPos = productIndexMap.get(descrizione);
