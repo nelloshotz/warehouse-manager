@@ -29,63 +29,133 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function buildPaginatedPdfHtml(
+function formatGiacenzaPdf(value: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("it-IT", { maximumFractionDigits: 3 });
+}
+
+/** Righe da includere nel PDF: sempre l'intero catalogo se lo stato non è ancora popolato. */
+function rowsForPdf(
+  rows: Array<{ nome_materia_prima: string; giacenza_bancali: number }>
+): Array<{ nome_materia_prima: string; giacenza_bancali: number }> {
+  if (rows.length > 0) return rows;
+  const catalog = Array.isArray(productsData.prodotti) ? productsData.prodotti : [];
+  return catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 }));
+}
+
+/**
+ * PDF su più pagine A4: una tabella con tutte le righe; il motore di stampa
+ * spezza tra le pagine. L'intestazione tabella si ripete (thead) su ogni pagina.
+ */
+function buildReportPdfHtml(
   rows: Array<{ nome_materia_prima: string; giacenza_bancali: number }>
 ): string {
-  const rowsPerPage = 35;
-  const pages: string[] = [];
+  const data = rowsForPdf(rows);
+  const dataRows = data
+    .map(
+      (row) => `
+    <tr>
+      <td class="col-prodotto">${escapeHtml(row.nome_materia_prima)}</td>
+      <td class="col-giacenza">${escapeHtml(formatGiacenzaPdf(row.giacenza_bancali))}</td>
+    </tr>`
+    )
+    .join("");
 
-  for (let i = 0; i < rows.length; i += rowsPerPage) {
-    const chunk = rows.slice(i, i + rowsPerPage);
-    const tableRows = chunk
-      .map(
-        (row) => `
+  const dataGenerazione = escapeHtml(
+    new Date().toLocaleDateString("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+  );
+
+  return `<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 14mm 12mm; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        color: #111827;
+        font-size: 11px;
+        margin: 0;
+        padding: 0;
+      }
+      .doc-header {
+        margin-bottom: 12px;
+        page-break-after: avoid;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 6px 0;
+        font-weight: 700;
+      }
+      .subtitle {
+        font-size: 12px;
+        color: #6B7280;
+        margin: 0;
+      }
+      table.report {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      table.report thead {
+        display: table-header-group;
+      }
+      table.report tbody {
+        display: table-row-group;
+      }
+      table.report tr {
+        page-break-inside: avoid;
+      }
+      table.report th,
+      table.report td {
+        border: 1px solid #D1D5DB;
+        padding: 7px 10px;
+        vertical-align: top;
+        word-wrap: break-word;
+      }
+      table.report th {
+        background: #F3F4F6;
+        font-weight: 600;
+        font-size: 11px;
+      }
+      .col-prodotto {
+        width: 72%;
+        text-align: left;
+      }
+      .col-giacenza {
+        width: 28%;
+        text-align: right;
+        white-space: nowrap;
+      }
+      table.report th.col-giacenza {
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc-header">
+      <h1>Report Giacenza Materie Prime</h1>
+      <p class="subtitle">Generato il ${dataGenerazione} · ${data.length} prodotti</p>
+    </div>
+    <table class="report" role="table">
+      <thead>
         <tr>
-          <td>${escapeHtml(row.nome_materia_prima)}</td>
-          <td style="text-align:right;">${row.giacenza_bancali}</td>
-        </tr>`
-      )
-      .join("");
-
-    pages.push(`
-      <div class="page">
-        <h1>Report Giacenza Materie Prime</h1>
-        <p class="subtitle">Generato il ${new Date().toLocaleDateString("it-IT")}</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Materia Prima</th>
-              <th>Giacenza Bancali</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-      </div>
-    `);
-  }
-
-  return `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #111827; }
-          .page { page-break-after: always; padding: 8px 10px; }
-          .page:last-child { page-break-after: auto; }
-          h1 { font-size: 18px; margin-bottom: 4px; }
-          .subtitle { font-size: 12px; color: #6B7280; margin-bottom: 12px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #D1D5DB; padding: 6px 8px; font-size: 12px; }
-          th { background: #F3F4F6; text-align: left; }
-        </style>
-      </head>
-      <body>
-        ${pages.join("\n")}
-      </body>
-    </html>
-  `;
+          <th class="col-prodotto" scope="col">Prodotto</th>
+          <th class="col-giacenza" scope="col">Giacenza</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${dataRows}
+      </tbody>
+    </table>
+  </body>
+</html>`;
 }
 
 export default function RawMaterialsStockScreen() {
@@ -140,7 +210,7 @@ export default function RawMaterialsStockScreen() {
   const handleDownloadPdf = async () => {
     try {
       setExporting(true);
-      const html = buildPaginatedPdfHtml(reportRows);
+      const html = buildReportPdfHtml(reportRows);
       const file = await Print.printToFileAsync({ html, base64: Platform.OS === "web" });
 
       if (Platform.OS === "web") {
