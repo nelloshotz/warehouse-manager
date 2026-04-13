@@ -63,13 +63,32 @@ function parseDate(value) {
   const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (!match) return null;
 
-  const month = Number.parseInt(match[1], 10);
-  const day = Number.parseInt(match[2], 10);
+  const part1 = Number.parseInt(match[1], 10);
+  const part2 = Number.parseInt(match[2], 10);
   let year = Number.parseInt(match[3], 10);
   if (year < 100) year = year <= 50 ? 2000 + year : 1900 + year;
 
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return Number.isNaN(date.getTime()) ? null : date;
+  let month;
+  let day;
+  if (part1 > 12) {
+    day = part1;
+    month = part2;
+  } else if (part2 > 12) {
+    month = part1;
+    day = part2;
+  } else {
+    day = part1;
+    month = part2;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return null;
+  }
+  return date;
 }
 
 function main() {
