@@ -52,7 +52,13 @@ function toNumber(value) {
 }
 
 function normalizeName(value) {
-  return String(value || "").trim().toLocaleLowerCase("it-IT");
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("it-IT")
+    .replace(/[‐‑–—−]/g, "-")
+    .replace(/\s*-\s*/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseDate(value) {

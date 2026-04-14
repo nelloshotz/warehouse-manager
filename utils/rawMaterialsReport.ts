@@ -6,7 +6,13 @@ export interface RawMaterialRow {
 }
 
 function normalizeName(value: string): string {
-  return String(value || "").trim().toLocaleLowerCase("it-IT");
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("it-IT")
+    .replace(/[‐‑–—−]/g, "-")
+    .replace(/\s*-\s*/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getGroupLetter(name: string): string {
