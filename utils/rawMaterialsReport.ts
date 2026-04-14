@@ -12,7 +12,9 @@ function normalizeName(value: string): string {
 function getGroupLetter(name: string): string {
   const trimmed = String(name || "").trim();
   const first = trimmed.charAt(0).toLocaleUpperCase("it-IT");
-  return /[A-Z]/.test(first) ? first : "#";
+  if (/[0-9]/.test(first)) return first;
+  if (/[A-Z]/.test(first)) return first;
+  return "~";
 }
 
 function parseCsvLine(line: string, delimiter = ";"): string[] {
@@ -172,11 +174,16 @@ export function buildRawMaterialsReportFromCsv(
     .sort((a, b) => {
       const letterA = getGroupLetter(a.nome_materia_prima);
       const letterB = getGroupLetter(b.nome_materia_prima);
+      const isNumberA = /[0-9]/.test(letterA);
+      const isNumberB = /[0-9]/.test(letterB);
+      const isLetterA = /[A-Z]/.test(letterA);
+      const isLetterB = /[A-Z]/.test(letterB);
+
+      if (isNumberA !== isNumberB) return isNumberA ? -1 : 1;
+      if (isLetterA !== isLetterB) return isLetterA ? -1 : 1;
 
       if (letterA !== letterB) {
-        if (letterA === "#") return 1;
-        if (letterB === "#") return -1;
-        return letterA.localeCompare(letterB, "it", { sensitivity: "base" });
+        return letterA.localeCompare(letterB, "it", { sensitivity: "base", numeric: true });
       }
 
       const zeroA = a.giacenza_bancali === 0 ? 0 : 1;

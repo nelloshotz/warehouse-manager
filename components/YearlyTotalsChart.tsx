@@ -25,9 +25,11 @@ export default function YearlyTotalsChart({ data, year }: YearlyTotalsChartProps
     );
   }
 
-  // Trova il valore massimo per il ridimensionamento
-  const maxValue = Math.max(
-    ...data.map(item => Math.max(item.entryCost, item.exitCost, item.storageCost))
+  // Massimo dei totali mensili: le barre sono stacked (somma ingresso+uscita+stoccaggio).
+  // In questo modo l'altezza complessiva non supera mai l'area grafico.
+  const maxTotalValue = Math.max(
+    ...data.map((item) => item.entryCost + item.exitCost + item.storageCost),
+    0
   );
   
   // Nomi dei mesi
@@ -47,9 +49,10 @@ export default function YearlyTotalsChart({ data, year }: YearlyTotalsChartProps
             const monthName = monthNames[monthNumber - 1];
             
             const totalCost = item.entryCost + item.exitCost + item.storageCost;
-            const entryHeight = (item.entryCost / maxValue) * 180;
-            const exitHeight = (item.exitCost / maxValue) * 180;
-            const storageHeight = (item.storageCost / maxValue) * 180;
+            const safeMax = maxTotalValue > 0 ? maxTotalValue : 1;
+            const entryHeight = (item.entryCost / safeMax) * 180;
+            const exitHeight = (item.exitCost / safeMax) * 180;
+            const storageHeight = (item.storageCost / safeMax) * 180;
             
             return (
               <View key={index} style={styles.barGroup}>

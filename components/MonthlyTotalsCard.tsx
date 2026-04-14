@@ -219,7 +219,7 @@ export default function MonthlyTotalsCard({
         {expandedEntry && totalEntryPallets > 0 && (
           <View style={styles.expandedDetails}>
             <Text style={styles.expandedText}>
-              <Text style={styles.expandedSectionTitle}>Bancali Normali:{'\n'}</Text>
+              <Text style={styles.expandedSectionTitle}>Bancali Ambient:{'\n'}</Text>
               <Text style={styles.expandedText}>
                 {entrySummary && (entrySummary.numero_bancali_ingresso_100x120 > 0 || entrySummary.numero_bancali_ingresso_80x120 > 0) ? (
                   [
@@ -298,7 +298,7 @@ export default function MonthlyTotalsCard({
         {expandedExit && totalExitPallets > 0 && (
           <View style={styles.expandedDetails}>
             <Text style={styles.expandedText}>
-              <Text style={styles.expandedSectionTitle}>Bancali Normali:{'\n'}</Text>
+              <Text style={styles.expandedSectionTitle}>Bancali Ambient:{'\n'}</Text>
               <Text style={styles.expandedText}>
                 {exitSummary && (exitSummary.tot_bancali_100x120 > 0 || exitSummary.tot_bancali_80x120 > 0) ? (
                   [
@@ -363,7 +363,7 @@ export default function MonthlyTotalsCard({
         {expandedStorage && totalStoragePallets > 0 && (
           <View style={styles.expandedDetails}>
             <Text style={styles.expandedText}>
-              <Text style={styles.expandedSectionTitle}>Bancali Normali:{'\n'}</Text>
+              <Text style={styles.expandedSectionTitle}>Bancali Ambient:{'\n'}</Text>
               <Text style={styles.expandedText}>
                 {storageDetails && (storageDetails.pallets100x120 > 0 || storageDetails.pallets80x120 > 0) ? (
                   [
