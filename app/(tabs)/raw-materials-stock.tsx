@@ -15,19 +15,21 @@ import * as FileSystem from "expo-file-system";
 import AppLayout from "@/components/AppLayout";
 import { colors } from "@/constants/colors";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { Download, FileBarChart, RefreshCw } from "lucide-react-native";
+import { Download, FileBarChart, RefreshCw, Settings } from "lucide-react-native";
 import { buildRawMaterialsReportFromCsv, RawMaterialRow } from "@/utils/rawMaterialsReport";
 import { buildReportPdfHtml } from "@/utils/rawMaterialsReportPdf";
 import { downloadRawMaterialsReportPdfWeb } from "@/utils/rawMaterialsReportPdfDownload";
-
-const productsData = require("@/prodotti.json") as { prodotti: string[] };
+import { useRawMaterialsProductsStore } from "@/store/rawMaterialsProductsStore";
+import RawMaterialsProductsEditModal from "@/components/RawMaterialsProductsEditModal";
 
 export default function RawMaterialsStockScreen() {
   const { uploadedFiles } = useWarehouseStore();
+  const products = useRawMaterialsProductsStore((state) => state.products);
   const [exporting, setExporting] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportRows, setReportRows] = useState<RawMaterialRow[]>([]);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [productsEditVisible, setProductsEditVisible] = useState(false);
 
   const latestCsvFile = useMemo(() => {
     const csvFiles = uploadedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
@@ -38,9 +40,9 @@ export default function RawMaterialsStockScreen() {
   }, [uploadedFiles]);
 
   const loadReport = async () => {
-    const products = Array.isArray(productsData.prodotti) ? productsData.prodotti : [];
+    const catalog = Array.isArray(products) ? products : [];
     if (!latestCsvFile?.uri) {
-      setReportRows(products.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportRows(catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
       setReportError("Nessun CSV caricato. Carica prima un file CSV dalla dashboard.");
       return;
     }
@@ -57,10 +59,10 @@ export default function RawMaterialsStockScreen() {
         csvText = await FileSystem.readAsStringAsync(latestCsvFile.uri);
       }
 
-      const rows = buildRawMaterialsReportFromCsv(csvText, products);
+      const rows = buildRawMaterialsReportFromCsv(csvText, catalog);
       setReportRows(rows);
     } catch (error: any) {
-      setReportRows(products.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportRows(catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
       setReportError(`Errore lettura file CSV: ${error?.message || "errore sconosciuto"}`);
     } finally {
       setLoadingReport(false);
@@ -69,12 +71,12 @@ export default function RawMaterialsStockScreen() {
 
   useEffect(() => {
     loadReport();
-  }, [latestCsvFile?.id]);
+  }, [latestCsvFile?.id, products]);
 
   const handleDownloadPdf = async () => {
     try {
       setExporting(true);
-      const catalog = Array.isArray(productsData.prodotti) ? productsData.prodotti : [];
+      const catalog = Array.isArray(products) ? products : [];
 
       if (Platform.OS === "web") {
         /* expo-print su web chiama solo window.print() e ignora l'HTML: PDF dai dati con jsPDF */
@@ -109,6 +111,13 @@ export default function RawMaterialsStockScreen() {
             <Text style={styles.title}>Giacenza Materie Prime</Text>
           </View>
           <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.refreshButton}
+              onPress={() => setProductsEditVisible(true)}
+              accessibilityLabel="Gestisci prodotti"
+            >
+              <Settings size={16} color={colors.primary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.refreshButton} onPress={loadReport} disabled={loadingReport}>
               {loadingReport ? (
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -146,6 +155,14 @@ export default function RawMaterialsStockScreen() {
             </View>
           ))}
         </ScrollView>
+
+        <RawMaterialsProductsEditModal
+          visible={productsEditVisible}
+          onClose={() => {
+            setProductsEditVisible(false);
+            loadReport();
+          }}
+        />
       </View>
     </AppLayout>
   );

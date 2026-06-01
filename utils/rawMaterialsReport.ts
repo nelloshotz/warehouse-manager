@@ -5,14 +5,25 @@ export interface RawMaterialRow {
   giacenza_bancali: number;
 }
 
-function normalizeName(value: string): string {
+/** Rimuove spazi e caratteri invisibili agli estremi (inserimento manuale / CSV). */
+export function sanitizeProductName(value: string): string {
   return String(value || "")
-    .trim()
+    .replace(/[\uFEFF\u200B-\u200D\u2060\u00AD]/g, "")
+    .replace(/\u00A0/g, " ")
+    .trim();
+}
+
+export function normalizeProductName(value: string): string {
+  return sanitizeProductName(value)
     .toLocaleLowerCase("it-IT")
     .replace(/[‐‑–—−]/g, "-")
     .replace(/\s*-\s*/g, " - ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeName(value: string): string {
+  return normalizeProductName(value);
 }
 
 function getGroupLetter(name: string): string {
