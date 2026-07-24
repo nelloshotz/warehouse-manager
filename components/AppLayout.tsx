@@ -12,7 +12,8 @@ import {
   FileText,
   FileBarChart,
   TrendingUp,
-  Settings
+  Settings,
+  Package
 } from "lucide-react-native";
 
 interface AppLayoutProps {
@@ -40,6 +41,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { title: "Documenti", icon: FileText, route: "/(tabs)/documents", color: colors.primary },
     { title: "Report Mensili", icon: FileBarChart, route: "/(tabs)/reports", color: colors.primary },
     { title: "Giacenza Materie Prime", icon: FileBarChart, route: "/(tabs)/raw-materials-stock", color: colors.primary },
+    { title: "Giacenza Prodotti Finiti", icon: Package, route: "/(tabs)/finished-products-stock", color: colors.secondary },
     { title: "Panoramica Annuale", icon: TrendingUp, route: "/(tabs)/yearly", color: colors.primary },
     { title: "Impostazioni", icon: Settings, route: "/(tabs)/settings", color: colors.darkGray },
   ];
