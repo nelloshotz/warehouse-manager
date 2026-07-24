@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import type { RawMaterialRow } from "@/utils/rawMaterialsReport";
-import { formatGiacenzaForPdf, rowsForPdf } from "@/utils/rawMaterialsReportPdf";
+import { formatGiacenzaForPdf, formatTotaleForPdf, rowsForPdf } from "@/utils/rawMaterialsReportPdf";
 
 /**
  * PDF costruito dai dati (jsPDF), senza window.print sulla pagina app.
@@ -12,6 +12,8 @@ export function downloadRawMaterialsReportPdfWeb(
   catalog: string[]
 ): void {
   const data = rowsForPdf(reportRows, catalog);
+  const totalGiacenza = data.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+  
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const margin = 14;
   let y = margin;
@@ -37,13 +39,21 @@ export function downloadRawMaterialsReportPdfWeb(
     startY: y,
     head: [["Prodotto", "Giacenza"]],
     body: data.map((r) => [r.nome_materia_prima, formatGiacenzaForPdf(r.giacenza_bancali)]),
+    foot: [["TOTALE", formatTotaleForPdf(totalGiacenza)]],
     showHead: "everyPage",
+    showFoot: "lastPage",
     theme: "grid",
     styles: { font: "helvetica", fontSize: 9, cellPadding: 2 },
     headStyles: {
       fillColor: [243, 244, 246],
       textColor: [17, 24, 39],
       fontStyle: "bold",
+    },
+    footStyles: {
+      fillColor: [59, 130, 246],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 10,
     },
     columnStyles: {
       0: { cellWidth: 135 },

@@ -15,6 +15,12 @@ export function formatGiacenzaForPdf(value: number): string {
   return n.toLocaleString("it-IT", { maximumFractionDigits: 3 });
 }
 
+export function formatTotaleForPdf(value: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return Math.round(n).toLocaleString("it-IT");
+}
+
 /** Righe PDF: se lo stato non è ancora popolato, tutto il catalogo a giacenza 0. */
 export function rowsForPdf(rows: RawMaterialRow[], catalog: string[]): RawMaterialRow[] {
   if (rows.length > 0) return rows;
@@ -26,6 +32,8 @@ export function rowsForPdf(rows: RawMaterialRow[], catalog: string[]): RawMateri
  */
 export function buildReportPdfHtml(rows: RawMaterialRow[], catalog: string[]): string {
   const data = rowsForPdf(rows, catalog);
+  const totalGiacenza = data.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+  
   const dataRows = data
     .map(
       (row) => `
@@ -110,6 +118,15 @@ export function buildReportPdfHtml(rows: RawMaterialRow[], catalog: string[]): s
       table.report th.col-giacenza {
         text-align: right;
       }
+      .total-row {
+        background: #3B82F6;
+        font-weight: 700;
+        color: #FFFFFF;
+      }
+      .total-row td {
+        padding: 10px;
+        border-color: #2563EB;
+      }
     </style>
   </head>
   <body>
@@ -126,6 +143,10 @@ export function buildReportPdfHtml(rows: RawMaterialRow[], catalog: string[]): s
       </thead>
       <tbody>
         ${dataRows}
+        <tr class="total-row">
+          <td class="col-prodotto">TOTALE</td>
+          <td class="col-giacenza">${escapeHtml(formatTotaleForPdf(totalGiacenza))}</td>
+        </tr>
       </tbody>
     </table>
   </body>
