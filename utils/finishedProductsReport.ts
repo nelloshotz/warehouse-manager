@@ -122,13 +122,15 @@ function parseDate(value: string): Date | null {
  * Scorre le righe CSV in ordine (dopo l'intestazione). Per ogni riga calcola la
  * giacenza bancali come per i pallet (ingresso meno uscite con data ≤ data di
  * riferimento). Se il testo nella colonna prodotto NON coincide con nessuna
- * materia prima (normalizzato), somma quella giacenza al totale di quel prodotto;
- * righe diverse con lo stesso prodotto si accumulano. In questo modo otteniamo
- * il totale dei prodotti finiti (tutto tranne materie prime).
+ * materia prima (normalizzato) E NON è nella lista dei prodotti esclusi,
+ * somma quella giacenza al totale di quel prodotto; righe diverse con lo stesso
+ * prodotto si accumulano. In questo modo otteniamo il totale dei prodotti finiti
+ * (tutto tranne materie prime e prodotti esclusi).
  */
 export function buildFinishedProductsReportFromCsv(
   csvText: string,
   rawMaterialsProducts: string[],
+  excludedProducts: string[] = [],
   referenceDate: Date = new Date(),
   descrizioneColumnIndex: number = RAW_MATERIALS_REPORT_CSV_COLUMNS.descrizione
 ): FinishedProductRow[] {
@@ -149,6 +151,11 @@ export function buildFinishedProductsReportFromCsv(
     rawMaterialsSet.add(normalizeName(name));
   });
 
+  const excludedSet = new Set<string>();
+  excludedProducts.forEach((name) => {
+    excludedSet.add(normalizeName(name));
+  });
+
   const productTotals = new Map<string, number>();
   const lines = String(csvText || "").split(/\r?\n/).filter((line) => line.length > 0);
   if (lines.length < 2) {
@@ -166,6 +173,7 @@ export function buildFinishedProductsReportFromCsv(
     if (!descrizione) continue;
 
     if (rawMaterialsSet.has(descrizione)) continue;
+    if (excludedSet.has(descrizione)) continue;
 
     const ingresso = Math.max(0, toNumber(row[INGRESSO_BANCALI_INDEX] || ""));
     if (ingresso <= 0) continue;

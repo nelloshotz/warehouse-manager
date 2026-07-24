@@ -15,19 +15,23 @@ import * as FileSystem from "expo-file-system";
 import AppLayout from "@/components/AppLayout";
 import { colors } from "@/constants/colors";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { Download, Package, RefreshCw } from "lucide-react-native";
+import { Download, Package, RefreshCw, Settings } from "lucide-react-native";
 import { buildFinishedProductsReportFromCsv, FinishedProductRow } from "@/utils/finishedProductsReport";
 import { buildReportPdfHtml } from "@/utils/finishedProductsReportPdf";
 import { downloadFinishedProductsReportPdfWeb } from "@/utils/finishedProductsReportPdfDownload.web";
 import { useRawMaterialsProductsStore } from "@/store/rawMaterialsProductsStore";
+import { useFinishedProductsExcludedStore } from "@/store/finishedProductsExcludedStore";
+import FinishedProductsExcludedModal from "@/components/FinishedProductsExcludedModal";
 
 export default function FinishedProductsStockScreen() {
   const { uploadedFiles } = useWarehouseStore();
   const rawMaterialsProducts = useRawMaterialsProductsStore((state) => state.products);
+  const excludedProducts = useFinishedProductsExcludedStore((state) => state.excludedProducts);
   const [exporting, setExporting] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportRows, setReportRows] = useState<FinishedProductRow[]>([]);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [excludedModalVisible, setExcludedModalVisible] = useState(false);
 
   const latestCsvFile = useMemo(() => {
     const csvFiles = uploadedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
@@ -39,6 +43,7 @@ export default function FinishedProductsStockScreen() {
 
   const loadReport = async () => {
     const rawMaterials = Array.isArray(rawMaterialsProducts) ? rawMaterialsProducts : [];
+    const excluded = Array.isArray(excludedProducts) ? excludedProducts : [];
     if (!latestCsvFile?.uri) {
       setReportRows([]);
       setReportError("Nessun CSV caricato. Carica prima un file CSV dalla dashboard.");
@@ -57,7 +62,7 @@ export default function FinishedProductsStockScreen() {
         csvText = await FileSystem.readAsStringAsync(latestCsvFile.uri);
       }
 
-      const rows = buildFinishedProductsReportFromCsv(csvText, rawMaterials);
+      const rows = buildFinishedProductsReportFromCsv(csvText, rawMaterials, excluded);
       setReportRows(rows);
     } catch (error: any) {
       setReportRows([]);
@@ -69,7 +74,7 @@ export default function FinishedProductsStockScreen() {
 
   useEffect(() => {
     loadReport();
-  }, [latestCsvFile?.id, rawMaterialsProducts]);
+  }, [latestCsvFile?.id, rawMaterialsProducts, excludedProducts]);
 
   const handleDownloadPdf = async () => {
     try {
@@ -107,6 +112,13 @@ export default function FinishedProductsStockScreen() {
             <Text style={styles.title}>Giacenza Prodotti Finiti</Text>
           </View>
           <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => setExcludedModalVisible(true)}
+              accessibilityLabel="Gestisci prodotti esclusi"
+            >
+              <Settings size={16} color={colors.secondary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.refreshButton} onPress={loadReport} disabled={loadingReport}>
               {loadingReport ? (
                 <ActivityIndicator size="small" color={colors.secondary} />
@@ -159,6 +171,14 @@ export default function FinishedProductsStockScreen() {
             </View>
           )}
         </ScrollView>
+
+        <FinishedProductsExcludedModal
+          visible={excludedModalVisible}
+          onClose={() => {
+            setExcludedModalVisible(false);
+            loadReport();
+          }}
+        />
       </View>
     </AppLayout>
   );
@@ -199,6 +219,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  settingsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
   },
   refreshButton: {
     width: 36,
