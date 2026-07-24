@@ -19,6 +19,8 @@ export function formatGiacenzaForPdf(value: number): string {
  * HTML per expo-print (iOS/Android): tabella da dati, più pagine via CSS di stampa.
  */
 export function buildReportPdfHtml(rows: FinishedProductRow[]): string {
+  const totalGiacenza = rows.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+  
   const dataRows = rows
     .map(
       (row) => `
@@ -103,6 +105,15 @@ export function buildReportPdfHtml(rows: FinishedProductRow[]): string {
       table.report th.col-giacenza {
         text-align: right;
       }
+      .total-row {
+        background: #F97316;
+        font-weight: 700;
+        color: #FFFFFF;
+      }
+      .total-row td {
+        padding: 10px;
+        border-color: #EA580C;
+      }
     </style>
   </head>
   <body>
@@ -119,6 +130,10 @@ export function buildReportPdfHtml(rows: FinishedProductRow[]): string {
       </thead>
       <tbody>
         ${dataRows}
+        <tr class="total-row">
+          <td class="col-prodotto">TOTALE</td>
+          <td class="col-giacenza">${escapeHtml(formatGiacenzaForPdf(totalGiacenza))}</td>
+        </tr>
       </tbody>
     </table>
   </body>

@@ -10,6 +10,8 @@ import { formatGiacenzaForPdf } from "@/utils/finishedProductsReportPdf";
 export function downloadFinishedProductsReportPdfWeb(
   reportRows: FinishedProductRow[]
 ): void {
+  const totalGiacenza = reportRows.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+  
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const margin = 14;
   let y = margin;
@@ -35,13 +37,21 @@ export function downloadFinishedProductsReportPdfWeb(
     startY: y,
     head: [["Prodotto", "Giacenza"]],
     body: reportRows.map((r) => [r.nome_prodotto, formatGiacenzaForPdf(r.giacenza_bancali)]),
+    foot: [["TOTALE", formatGiacenzaForPdf(totalGiacenza)]],
     showHead: "everyPage",
+    showFoot: "lastPage",
     theme: "grid",
     styles: { font: "helvetica", fontSize: 9, cellPadding: 2 },
     headStyles: {
       fillColor: [243, 244, 246],
       textColor: [17, 24, 39],
       fontStyle: "bold",
+    },
+    footStyles: {
+      fillColor: [249, 115, 22],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 10,
     },
     columnStyles: {
       0: { cellWidth: 135 },

@@ -149,6 +149,15 @@ export default function FinishedProductsStockScreen() {
               </Text>
             </View>
           ))}
+          
+          {reportRows.length > 0 && (
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalLabel, styles.nameColumn]}>TOTALE</Text>
+              <Text style={[styles.totalValue, styles.qtyColumn]}>
+                {reportRows.reduce((sum, row) => sum + row.giacenza_bancali, 0).toFixed(3)}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </AppLayout>
@@ -276,5 +285,29 @@ const styles = StyleSheet.create({
   },
   rowQtyZero: {
     color: colors.darkGray,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.secondary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    marginTop: 16,
+    marginBottom: 8,
+    width: "100%",
+    maxWidth: 780,
+    gap: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.card,
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.card,
   },
 });
