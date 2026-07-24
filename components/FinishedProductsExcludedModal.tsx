@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,64 +7,185 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
+import * as FileSystem from "expo-file-system";
 import { colors } from "@/constants/colors";
-import { Plus, X } from "lucide-react-native";
+import { X, Search, Check } from "lucide-react-native";
 import { useFinishedProductsExcludedStore } from "@/store/finishedProductsExcludedStore";
-import { sanitizeProductName } from "@/utils/finishedProductsReport";
+import { useRawMaterialsProductsStore } from "@/store/rawMaterialsProductsStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
+import { sanitizeProductName, normalizeProductName } from "@/utils/finishedProductsReport";
+import { RAW_MATERIALS_REPORT_CSV_COLUMNS } from "@/constants/settings";
 
 interface FinishedProductsExcludedModalProps {
   visible: boolean;
   onClose: () => void;
 }
 
+function parseCsvLine(line: string, delimiter = ";"): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === delimiter && !inQuotes) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+
+    current += ch;
+  }
+
+  out.push(current);
+  return out;
+}
+
 export default function FinishedProductsExcludedModal({
   visible,
   onClose,
 }: FinishedProductsExcludedModalProps) {
+  const { uploadedFiles } = useWarehouseStore();
+  const rawMaterialsProducts = useRawMaterialsProductsStore((state) => state.products);
   const excludedProducts = useFinishedProductsExcludedStore((state) => state.excludedProducts);
   const addProduct = useFinishedProductsExcludedStore((state) => state.addProduct);
   const removeProduct = useFinishedProductsExcludedStore((state) => state.removeProduct);
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newProductName, setNewProductName] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
+  const [csvProducts, setCsvProducts] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [selectedExcluded, setSelectedExcluded] = useState<Set<string>>(new Set());
+
+  const latestCsvFile = useMemo(() => {
+    const csvFiles = uploadedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+    if (csvFiles.length === 0) return null;
+    return [...csvFiles].sort(
+      (a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+    )[0];
+  }, [uploadedFiles]);
+
+  useEffect(() => {
+    if (visible && latestCsvFile) {
+      loadProducts();
+    }
+  }, [visible, latestCsvFile?.id]);
+
+  const loadProducts = async () => {
+    if (!latestCsvFile?.uri) return;
+
+    try {
+      setLoading(true);
+      let csvText = "";
+      if (Platform.OS === "web") {
+        const response = await fetch(latestCsvFile.uri);
+        csvText = await response.text();
+      } else {
+        csvText = await FileSystem.readAsStringAsync(latestCsvFile.uri);
+      }
+
+      const lines = csvText.split(/\r?\n/).filter((line) => line.length > 0);
+      if (lines.length < 2) {
+        setCsvProducts([]);
+        return;
+      }
+
+      const rawMaterialsSet = new Set<string>();
+      rawMaterialsProducts.forEach((name) => {
+        rawMaterialsSet.add(normalizeProductName(name));
+      });
+
+      const productsMap = new Map<string, string>();
+      const DESCRIZIONE_INDEX = RAW_MATERIALS_REPORT_CSV_COLUMNS.descrizione;
+
+      for (let i = 1; i < lines.length; i += 1) {
+        const row = parseCsvLine(lines[i], ";");
+        const descrizioneOriginal = sanitizeProductName(row[DESCRIZIONE_INDEX] || "");
+        const descrizione = normalizeProductName(descrizioneOriginal);
+        
+        if (!descrizione) continue;
+        if (rawMaterialsSet.has(descrizione)) continue;
+        
+        productsMap.set(descrizione, descrizioneOriginal);
+      }
+
+      const uniqueProducts = Array.from(productsMap.values()).sort((a, b) =>
+        a.localeCompare(b, "it", { sensitivity: "base" })
+      );
+
+      setCsvProducts(uniqueProducts);
+    } catch (error) {
+      console.error("Errore caricamento prodotti:", error);
+      setCsvProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredCsvProducts = useMemo(() => {
+    if (!searchText) return csvProducts;
+    const search = searchText.toLowerCase();
+    return csvProducts.filter((p) => p.toLowerCase().includes(search));
+  }, [csvProducts, searchText]);
+
+  const availableProducts = useMemo(() => {
+    const excludedSet = new Set(excludedProducts.map((p) => normalizeProductName(p)));
+    return filteredCsvProducts.filter((p) => !excludedSet.has(normalizeProductName(p)));
+  }, [filteredCsvProducts, excludedProducts]);
+
+  const handleToggleProduct = (product: string) => {
+    const newSet = new Set(selectedProducts);
+    if (newSet.has(product)) {
+      newSet.delete(product);
+    } else {
+      newSet.add(product);
+    }
+    setSelectedProducts(newSet);
+  };
+
+  const handleToggleExcluded = (product: string) => {
+    const newSet = new Set(selectedExcluded);
+    if (newSet.has(product)) {
+      newSet.delete(product);
+    } else {
+      newSet.add(product);
+    }
+    setSelectedExcluded(newSet);
+  };
+
+  const handleExcludeSelected = () => {
+    selectedProducts.forEach((product) => {
+      addProduct(product);
+    });
+    setSelectedProducts(new Set());
+  };
+
+  const handleReEnableSelected = () => {
+    selectedExcluded.forEach((product) => {
+      removeProduct(product);
+    });
+    setSelectedExcluded(new Set());
+  };
 
   const handleClose = () => {
-    setShowAddForm(false);
-    setNewProductName("");
-    setAddError(null);
+    setSearchText("");
+    setSelectedProducts(new Set());
+    setSelectedExcluded(new Set());
     onClose();
-  };
-
-  const handleAddProduct = () => {
-    const cleaned = sanitizeProductName(newProductName);
-    setNewProductName(cleaned);
-    const result = addProduct(cleaned);
-    if (!result.ok) {
-      setAddError(result.error || "Impossibile aggiungere il prodotto.");
-      return;
-    }
-    setNewProductName("");
-    setAddError(null);
-    setShowAddForm(false);
-  };
-
-  const confirmDelete = (productName: string) => {
-    const message = `Sei sicuro di voler rimuovere "${productName}" dalla lista esclusi?`;
-
-    if (Platform.OS === "web") {
-      const confirmed = window.confirm(message);
-      if (confirmed) removeProduct(productName);
-      return;
-    }
-
-    Alert.alert("Conferma rimozione", message, [
-      { text: "Annulla", style: "cancel" },
-      { text: "OK", onPress: () => removeProduct(productName) },
-    ]);
   };
 
   return (
@@ -72,74 +193,102 @@ export default function FinishedProductsExcludedModal({
       <View style={styles.overlay}>
         <View style={styles.panel}>
           <View style={styles.header}>
-            <Text style={styles.title}>Escludi Prodotti dal Report</Text>
+            <Text style={styles.title}>Gestione Prodotti Esclusi</Text>
             <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
               <X size={20} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.description}>
-            I prodotti aggiunti qui NON appariranno nel report giacenza prodotti finiti.
-          </Text>
-
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {excludedProducts.length === 0 ? (
-              <Text style={styles.emptyText}>Nessun prodotto escluso</Text>
-            ) : (
-              excludedProducts.map((product) => (
-                <View key={product} style={styles.productRow}>
-                  <Text style={styles.productName}>{product}</Text>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => confirmDelete(product)}
-                    accessibilityLabel={`Rimuovi ${product} dalla lista esclusi`}
-                  >
-                    <X size={18} color={colors.warning} />
-                  </TouchableOpacity>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.secondary} />
+              <Text style={styles.loadingText}>Caricamento prodotti...</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Prodotti Disponibili</Text>
+                <View style={styles.searchContainer}>
+                  <Search size={16} color={colors.darkGray} />
+                  <TextInput
+                    style={styles.searchInput}
+                    value={searchText}
+                    onChangeText={setSearchText}
+                    placeholder="Cerca prodotto..."
+                    placeholderTextColor={colors.darkGray}
+                  />
                 </View>
-              ))
-            )}
-          </ScrollView>
-
-          <View style={styles.footer}>
-            {showAddForm ? (
-              <View style={styles.addForm}>
-                <Text style={styles.addLabel}>Nome prodotto da escludere</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newProductName}
-                  onChangeText={(value) => {
-                    setNewProductName(value);
-                    if (addError) setAddError(null);
-                  }}
-                  onBlur={() => setNewProductName((value) => sanitizeProductName(value))}
-                  placeholder="Es. PRODOTTO XYZ"
-                  autoCapitalize="characters"
-                />
-                {addError && <Text style={styles.addError}>{addError}</Text>}
-                <View style={styles.addActions}>
-                  <TouchableOpacity
-                    style={styles.cancelAddButton}
-                    onPress={() => {
-                      setShowAddForm(false);
-                      setNewProductName("");
-                      setAddError(null);
-                    }}
-                  >
-                    <Text style={styles.cancelAddText}>Annulla</Text>
+                <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+                  {availableProducts.length === 0 ? (
+                    <Text style={styles.emptyText}>Nessun prodotto disponibile</Text>
+                  ) : (
+                    availableProducts.map((product) => (
+                      <TouchableOpacity
+                        key={product}
+                        style={[
+                          styles.productRow,
+                          selectedProducts.has(product) && styles.productRowSelected,
+                        ]}
+                        onPress={() => handleToggleProduct(product)}
+                      >
+                        <View style={styles.checkbox}>
+                          {selectedProducts.has(product) && (
+                            <Check size={16} color={colors.secondary} />
+                          )}
+                        </View>
+                        <Text style={styles.productName}>{product}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </ScrollView>
+                {selectedProducts.size > 0 && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleExcludeSelected}>
+                    <Text style={styles.actionButtonText}>
+                      Escludi {selectedProducts.size} selezionat{selectedProducts.size > 1 ? "i" : "o"}
+                    </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.saveAddButton} onPress={handleAddProduct}>
-                    <Text style={styles.saveAddText}>Escludi</Text>
-                  </TouchableOpacity>
-                </View>
+                )}
               </View>
-            ) : (
-              <TouchableOpacity style={styles.addButton} onPress={() => setShowAddForm(true)}>
-                <Plus size={18} color={colors.secondary} />
-                <Text style={styles.addButtonText}>Escludi prodotto</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+
+              <View style={[styles.section, styles.sectionExcluded]}>
+                <Text style={styles.sectionTitle}>Prodotti Esclusi ({excludedProducts.length})</Text>
+                <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+                  {excludedProducts.length === 0 ? (
+                    <Text style={styles.emptyText}>Nessun prodotto escluso</Text>
+                  ) : (
+                    excludedProducts.map((product) => (
+                      <TouchableOpacity
+                        key={product}
+                        style={[
+                          styles.productRow,
+                          styles.productRowExcluded,
+                          selectedExcluded.has(product) && styles.productRowSelected,
+                        ]}
+                        onPress={() => handleToggleExcluded(product)}
+                      >
+                        <View style={styles.checkbox}>
+                          {selectedExcluded.has(product) && (
+                            <Check size={16} color={colors.secondary} />
+                          )}
+                        </View>
+                        <Text style={styles.productName}>{product}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </ScrollView>
+                {selectedExcluded.size > 0 && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.actionButtonSuccess]}
+                    onPress={handleReEnableSelected}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      Riabilita {selectedExcluded.size} selezionat{selectedExcluded.size > 1 ? "i" : "o"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -149,14 +298,14 @@ export default function FinishedProductsExcludedModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     padding: 16,
   },
   panel: {
     backgroundColor: colors.card,
     borderRadius: 12,
-    maxHeight: "85%",
+    maxHeight: "90%",
     overflow: "hidden",
   },
   header: {
@@ -181,121 +330,108 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  description: {
-    fontSize: 13,
+  loadingContainer: {
+    padding: 48,
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 14,
     color: colors.darkGray,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.lightGray,
+  },
+  section: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    paddingBottom: 12,
+  },
+  sectionExcluded: {
+    borderBottomWidth: 0,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    padding: 0,
   },
   list: {
-    maxHeight: 360,
+    maxHeight: 220,
   },
   listContent: {
-    padding: 12,
+    paddingHorizontal: 16,
   },
   emptyText: {
     textAlign: "center",
     color: colors.darkGray,
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: "italic",
     paddingVertical: 24,
   },
   productRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 12,
     backgroundColor: colors.background,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 8,
-    gap: 8,
+    marginBottom: 6,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  productRowSelected: {
+    borderColor: colors.secondary,
+    backgroundColor: `${colors.secondary}15`,
+  },
+  productRowExcluded: {
+    backgroundColor: colors.lightGray,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   productName: {
     flex: 1,
-    fontSize: 14,
-    color: colors.text,
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: 12,
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.secondary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    backgroundColor: colors.background,
-  },
-  addButtonText: {
-    color: colors.secondary,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  addForm: {
-    gap: 8,
-  },
-  addLabel: {
     fontSize: 13,
-    fontWeight: "600",
-    color: colors.darkGray,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
     color: colors.text,
-    backgroundColor: colors.background,
   },
-  addError: {
-    color: colors.warning,
-    fontSize: 12,
-  },
-  addActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
-  cancelAddButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cancelAddText: {
-    color: colors.darkGray,
-    fontWeight: "600",
-  },
-  saveAddButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+  actionButton: {
     backgroundColor: colors.secondary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 12,
   },
-  saveAddText: {
+  actionButtonSuccess: {
+    backgroundColor: colors.success,
+  },
+  actionButtonText: {
     color: colors.card,
     fontWeight: "600",
+    fontSize: 14,
   },
 });
