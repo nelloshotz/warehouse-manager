@@ -15,6 +15,12 @@ export function formatGiacenzaForPdf(value: number): string {
   return n.toLocaleString("it-IT", { maximumFractionDigits: 3 });
 }
 
+export function formatTotaleForPdf(value: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return Math.round(n).toLocaleString("it-IT");
+}
+
 /**
  * HTML per expo-print (iOS/Android): tabella da dati, più pagine via CSS di stampa.
  */
@@ -132,7 +138,7 @@ export function buildReportPdfHtml(rows: FinishedProductRow[]): string {
         ${dataRows}
         <tr class="total-row">
           <td class="col-prodotto">TOTALE</td>
-          <td class="col-giacenza">${escapeHtml(formatGiacenzaForPdf(totalGiacenza))}</td>
+          <td class="col-giacenza">${escapeHtml(formatTotaleForPdf(totalGiacenza))}</td>
         </tr>
       </tbody>
     </table>

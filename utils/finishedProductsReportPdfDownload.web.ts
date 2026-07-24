@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import type { FinishedProductRow } from "@/utils/finishedProductsReport";
-import { formatGiacenzaForPdf } from "@/utils/finishedProductsReportPdf";
+import { formatGiacenzaForPdf, formatTotaleForPdf } from "@/utils/finishedProductsReportPdf";
 
 /**
  * PDF costruito dai dati (jsPDF), senza window.print sulla pagina app.
@@ -37,7 +37,7 @@ export function downloadFinishedProductsReportPdfWeb(
     startY: y,
     head: [["Prodotto", "Giacenza"]],
     body: reportRows.map((r) => [r.nome_prodotto, formatGiacenzaForPdf(r.giacenza_bancali)]),
-    foot: [["TOTALE", formatGiacenzaForPdf(totalGiacenza)]],
+    foot: [["TOTALE", formatTotaleForPdf(totalGiacenza)]],
     showHead: "everyPage",
     showFoot: "lastPage",
     theme: "grid",

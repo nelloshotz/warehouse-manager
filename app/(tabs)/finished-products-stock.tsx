@@ -166,7 +166,7 @@ export default function FinishedProductsStockScreen() {
             <View style={styles.totalRow}>
               <Text style={[styles.totalLabel, styles.nameColumn]}>TOTALE</Text>
               <Text style={[styles.totalValue, styles.qtyColumn]}>
-                {reportRows.reduce((sum, row) => sum + row.giacenza_bancali, 0).toFixed(3)}
+                {Math.round(reportRows.reduce((sum, row) => sum + row.giacenza_bancali, 0))}
               </Text>
             </View>
           )}
