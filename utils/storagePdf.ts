@@ -1,6 +1,7 @@
 import { CostSettings } from "@/types/warehouse";
 import { formatCurrency, formatMonth } from "@/utils/calculations";
 import { DocumentMonthStorage, splitByRegime } from "@/utils/storageCalculation";
+import { tariffPeriodLabel } from "@/utils/tariffs";
 
 /**
  * Modello dati comune per i PDF di dettaglio stoccaggio (documento e mese).
@@ -8,7 +9,7 @@ import { DocumentMonthStorage, splitByRegime } from "@/utils/storageCalculation"
  */
 
 export const STORAGE_PDF_DETAIL_HEAD = ["Periodo", "Giorni", "Tipo", "Regime", "Bancali"];
-export const STORAGE_PDF_TOTAL_HEAD = ["Periodo", "Giorni", "Tipo", "Regime", "Bancali tot.", "Equiv.", "Costo"];
+export const STORAGE_PDF_TOTAL_HEAD = ["Periodo", "Giorni", "Tipo", "Regime", "Bancali tot.", "Equiv.", "Tariffa", "Costo"];
 
 export interface StoragePdfSection {
   title: string;
@@ -79,6 +80,7 @@ function section(title: string, entry: DocumentMonthStorage): StoragePdfSection 
         regime(g.congelato),
         String(p.bancali),
         String(p.equivalenti),
+        formatTariffa(p.tariffa),
         formatCurrency(p.costo),
       ])
     ),
@@ -94,10 +96,38 @@ function generatedOn(): string {
   return new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function rateNote(costSettings: CostSettings): string {
+function formatTariffa(value: number): string {
+  return `${value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} €`;
+}
+
+/** Nota sulle tariffe di stoccaggio applicate, con l'eventuale variazione di prezzo */
+function rateNote(entries: DocumentMonthStorage[]): string {
+  const periodi: Array<{ periodo: string; ambient?: number; congelato?: number }> = [];
+  entries.forEach((e) =>
+    e.gruppi.forEach((g) =>
+      g.periodi.forEach((p) => {
+        const periodo = tariffPeriodLabel(p.dal);
+        let item = periodi.find((x) => x.periodo === periodo);
+        if (!item) {
+          item = { periodo };
+          periodi.push(item);
+        }
+        if (g.congelato) item.congelato = p.tariffa;
+        else item.ambient = p.tariffa;
+      })
+    )
+  );
+  const tariffe = periodi
+    .map(
+      (t) =>
+        `${t.periodo}:` +
+        (t.ambient !== undefined ? ` ambient ${formatTariffa(t.ambient)}` : "") +
+        (t.congelato !== undefined ? ` · congelato ${formatTariffa(t.congelato)}` : "")
+    )
+    .join(" — ");
   return (
-    `Tariffe: ambient ${formatCurrency(costSettings.costo_storage)} · congelato ` +
-    `${formatCurrency(costSettings.costo_congelato_storage)} per bancale equivalente al giorno. ` +
+    (periodi.length > 1 ? "Variazione tariffa di stoccaggio — " : "Tariffa di stoccaggio — ") +
+    `${tariffe} (per bancale equivalente al giorno). ` +
     `Il giorno di ingresso è conteggiato; dal giorno di uscita lo stoccaggio è calcolato sui bancali rimanenti. ` +
     `L'equivalenza è calcolata sul totale dei bancali del documento, per tipologia e regime.`
   );
@@ -125,7 +155,7 @@ export function buildDocumentStoragePdf(
     ],
     totalLabel: "Totale stoccaggio documento",
     total: formatCurrency(t.totale),
-    note: rateNote(costSettings),
+    note: rateNote(entries),
   };
 }
 
@@ -149,7 +179,7 @@ export function buildMonthStoragePdf(
     ],
     totalLabel: `Totale ${meseLabel}`,
     total: formatCurrency(t.totale),
-    note: rateNote(costSettings),
+    note: rateNote(documenti),
   };
 }
 
@@ -211,8 +241,8 @@ export function buildStoragePdfHtml(report: StoragePdfReport): string {
       tr { page-break-inside: avoid; }
       th, td { border: 1px solid #D1D5DB; padding: 3px 5px; }
       th { background: #F3F4F6; text-align: left; }
-      .c0 { width: 30%; } .c1, .c4, .c5 { width: 9%; text-align: right; } .c2 { width: 11%; } .c3 { width: 12%; }
-      .c6 { width: 20%; text-align: right; }
+      .c0 { width: 25%; } .c1, .c4, .c5 { width: 8%; text-align: right; } .c2 { width: 10%; } .c3 { width: 11%; }
+      .c6 { width: 13%; text-align: right; } .c7 { width: 17%; text-align: right; }
       .summary { border-top: 1px solid #9CA3AF; padding-top: 6px; margin-top: 6px; page-break-inside: avoid; }
       .sum { display: flex; justify-content: space-between; color: #4B5563; font-size: 11px; }
       .total { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; margin-top: 4px; }

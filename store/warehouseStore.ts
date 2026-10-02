@@ -6,6 +6,7 @@ import { calculateEquivalence } from "@/utils/calculations";
 import { calculateDocumentStorage, calculateStorageByMonth, DocumentMonthStorage } from "@/utils/storageCalculation";
 import { useSettingsStore } from "./settingsStore";
 import { BILLED_STORAGE } from "@/constants/billedStorage";
+import { costSettingsForDate, tariffPeriodIndex, tariffPeriodLabel } from "@/utils/tariffs";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 
@@ -38,8 +39,9 @@ interface WarehouseState {
     costiIngresso: number;
     costiUscita: number;
     costiStoccaggio: number;
-    tutteUscite: Array<{ data: string; bancali: number; giorni: number | null }>;
+    tutteUscite: Array<{ data: string; bancali: number; giorni: number | null; tariffa?: number; costo?: number; congelato?: boolean }>;
     stoccaggioMensile: DocumentMonthStorage[];
+    tariffeIngresso?: Array<{ periodo: string; tariffaAmbient: number; tariffaCongelato: number; costo: number }>;
   } | null>;
   getStorageMonthDetail: (monthKey: string) => Promise<DocumentMonthStorage[]>;
   getStorageDetailsByMonth: (monthKey: string) => Promise<{
@@ -371,7 +373,7 @@ export const useWarehouseStore = create<WarehouseState>()(
         let costiIngresso = 0;
         let costiUscita = 0;
         let costiStoccaggio = 0;
-        const tutteUscite: Array<{ data: string; bancali: number; giorni: number | null }> = [];
+        const tutteUscite: Array<{ data: string; bancali: number; giorni: number | null; tariffa?: number; costo?: number; congelato?: boolean }> = [];
         
         // Raccogli prima tutti i dati per calcolare l'equivalenza totale corretta
         // IMPORTANTE: Se un bancale è congelato, va contato SOLO come congelato (non anche come 100x120 o 80x120)
@@ -412,12 +414,27 @@ export const useWarehouseStore = create<WarehouseState>()(
           : 0;
         const equivCongelato80x120 = totalBancaliCongelato80x120; // 1:1 per 80x120 congelati
         
-        // Calcola i costi separatamente per normali e congelati
-        const costiNormali = equiv100x120 * costSettings.costo_ingresso + equiv80x120 * costSettings.costo_ingresso;
-        const costiCongelati =
-          (equivCongelato100x120 + equivCongelato80x120) *
-          costSettings.costo_congelato_ingresso;
-        costiIngresso = costiNormali + costiCongelati;
+        // Calcola i costi con la tariffa in vigore alla data di ingresso
+        // (equivalenza sul totale delle righe dello stesso periodo tariffario)
+        const ingressiPerTariffa = new Map<number, { data: string; b100: number; b80: number; c100: number; c80: number }>();
+        rows.forEach(row => {
+          const idx = tariffPeriodIndex(row.data_ingresso);
+          const g = ingressiPerTariffa.get(idx) || { data: row.data_ingresso, b100: 0, b80: 0, c100: 0, c80: 0 };
+          const is100 = row.tipologia_bancali_ingresso.toUpperCase() === '100X120';
+          const cong = row.note.toUpperCase().includes('CONGELATO');
+          if (cong) { if (is100) g.c100 += row.numero_bancali_ingresso; else g.c80 += row.numero_bancali_ingresso; }
+          else if (is100) g.b100 += row.numero_bancali_ingresso; else g.b80 += row.numero_bancali_ingresso;
+          ingressiPerTariffa.set(idx, g);
+        });
+        const tariffeIngresso = Array.from(ingressiPerTariffa.keys()).sort((a, b) => a - b).map(idx => {
+          const g = ingressiPerTariffa.get(idx)!;
+          const t = costSettingsForDate(g.data, costSettings);
+          const costo =
+            ((g.b100 > 0 ? calculateEquivalence(g.b100) : 0) + g.b80) * t.costo_ingresso +
+            ((g.c100 > 0 ? calculateEquivalence(g.c100) : 0) + g.c80) * t.costo_congelato_ingresso;
+          return { periodo: tariffPeriodLabel(g.data), tariffaAmbient: t.costo_ingresso, tariffaCongelato: t.costo_congelato_ingresso, costo };
+        });
+        costiIngresso = tariffeIngresso.reduce((sum, t) => sum + t.costo, 0);
         
         // Equivalenza totale (solo per visualizzazione, non per calcolo costi)
         const equivalenzaTotaleIngresso = equiv100x120 + equiv80x120 + equivCongelato100x120 + equivCongelato80x120;
@@ -432,26 +449,20 @@ export const useWarehouseStore = create<WarehouseState>()(
           Object.entries(row.uscite).forEach(([_, uscita]) => {
             if (uscita.data && uscita.bancali > 0) {
               bancaliUsciti += uscita.bancali;
+              // Calcola costo uscita con la tariffa in vigore alla data di uscita
+              const t = costSettingsForDate(uscita.data, costSettings);
+              const equivalenzaUscita = is100x120 ? calculateEquivalence(uscita.bancali) : uscita.bancali;
+              const tariffa = isCongelato ? t.costo_congelato_uscita : t.costo_uscita;
+              const costo = equivalenzaUscita * tariffa;
+              costiUscita += costo;
               tutteUscite.push({
                 data: uscita.data,
                 bancali: uscita.bancali,
-                giorni: uscita.giorni
+                giorni: uscita.giorni,
+                tariffa,
+                costo,
+                congelato: isCongelato
               });
-              
-              // Calcola costo uscita
-              let equivalenzaUscita = 0;
-              if (isCongelato) {
-                equivalenzaUscita = is100x120 
-                  ? calculateEquivalence(uscita.bancali)
-                  : uscita.bancali;
-                costiUscita += equivalenzaUscita * costSettings.costo_congelato_uscita;
-              } else if (is100x120) {
-                equivalenzaUscita = calculateEquivalence(uscita.bancali);
-                costiUscita += equivalenzaUscita * costSettings.costo_uscita;
-              } else {
-                equivalenzaUscita = uscita.bancali;
-                costiUscita += equivalenzaUscita * costSettings.costo_uscita;
-              }
             }
           });
           
@@ -494,7 +505,8 @@ export const useWarehouseStore = create<WarehouseState>()(
           costiUscita,
           costiStoccaggio,
           tutteUscite,
-          stoccaggioMensile
+          stoccaggioMensile,
+          tariffeIngresso
         };
       },
       
@@ -777,11 +789,12 @@ export const useWarehouseStore = create<WarehouseState>()(
             const equivCongelato80x120 = docData.bancaliCongelato80x120; // 1:1 per 80x120 congelati
             docEquivalenzaCongelato = equivCongelato100x120 + equivCongelato80x120;
             
-            // Calcola i costi separatamente per normali e congelati
-            const costiNormali = docEquivalenza100x120 * costSettings.costo_ingresso 
-              + docEquivalenza80x120 * costSettings.costo_ingresso;
+            // Calcola i costi separatamente per normali e congelati, con la tariffa del mese di ingresso
+            const t = costSettingsForDate(`${monthKey}-01`, costSettings);
+            const costiNormali = docEquivalenza100x120 * t.costo_ingresso 
+              + docEquivalenza80x120 * t.costo_ingresso;
             const costiCongelati =
-              docEquivalenzaCongelato * costSettings.costo_congelato_ingresso;
+              docEquivalenzaCongelato * t.costo_congelato_ingresso;
             docCostoIngresso = costiNormali + costiCongelati;
             
             // Aggiungi al totale del mese
@@ -884,6 +897,8 @@ export const useWarehouseStore = create<WarehouseState>()(
             
             let costoUscita = 0;
             let equivalenzaUscita = 0;
+            // Tariffe in vigore alla data di uscita
+            const t = costSettingsForDate(uscita.data, costSettings);
             
             if (isCongelato) {
               summary.tot_bancali_congelato += uscita.bancali;
@@ -891,7 +906,7 @@ export const useWarehouseStore = create<WarehouseState>()(
                 ? calculateEquivalence(uscita.bancali)
                 : uscita.bancali;
               summary.equivalenza_congelato += equivalenzaUscita;
-              costoUscita = equivalenzaUscita * costSettings.costo_congelato_uscita;
+              costoUscita = equivalenzaUscita * t.costo_congelato_uscita;
               summary.costi_uscita += costoUscita;
               summary.costi_uscita_congelati += costoUscita;
               if (isRefRow) {
@@ -902,7 +917,7 @@ export const useWarehouseStore = create<WarehouseState>()(
               summary.tot_bancali_100x120 += uscita.bancali;
               equivalenzaUscita = calculateEquivalence(uscita.bancali);
               summary.equivalenza_100x120 += equivalenzaUscita;
-              costoUscita = equivalenzaUscita * costSettings.costo_uscita;
+              costoUscita = equivalenzaUscita * t.costo_uscita;
               summary.costi_uscita += costoUscita;
               summary.costi_uscita_normali += costoUscita;
               if (isRefRow) {
@@ -912,7 +927,7 @@ export const useWarehouseStore = create<WarehouseState>()(
             } else {
               summary.tot_bancali_80x120 += uscita.bancali;
               equivalenzaUscita = uscita.bancali;
-              costoUscita = equivalenzaUscita * costSettings.costo_uscita;
+              costoUscita = equivalenzaUscita * t.costo_uscita;
               summary.costi_uscita += costoUscita;
               summary.costi_uscita_normali += costoUscita;
               if (isRefRow) {

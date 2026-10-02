@@ -1,5 +1,6 @@
 import { CostSettings, DocumentRow } from "@/types/warehouse";
 import { calculateEquivalence } from "@/utils/calculations";
+import { costSettingsForDate } from "@/utils/tariffs";
 
 /**
  * Calcolo dello stoccaggio mese per mese, raggruppato per documento.
@@ -14,6 +15,8 @@ import { calculateEquivalence } from "@/utils/calculations";
  *   non sulla singola riga. 80x120: 1:1.
  * - Righe con nota "CONGELATO": regime congelato, tariffa congelato.
  * - Il mese corrente è conteggiato fino ad oggi.
+ * - Tariffa del giorno: tariffe storiche (constants/settings.ts) o quelle delle Impostazioni;
+ *   un periodo che attraversa un cambio tariffa viene diviso.
  */
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -45,13 +48,13 @@ export interface RowMonthStorage {
 /** Periodo sul totale documento per una tipologia/regime */
 export interface GroupPeriod extends RowPeriod {
   equivalenti: number;
+  tariffa: number; // € per bancale equivalente al giorno
   costo: number;
 }
 
 export interface GroupMonthStorage {
   tipologia: Tipologia;
   congelato: boolean;
-  tariffa: number;
   periodi: GroupPeriod[];
   giorniBancale: number; // Σ giorni × equivalenti
   costo: number;
@@ -173,7 +176,10 @@ function groupMonth(righe: RowMonthStorage[], costSettings: CostSettings): Group
   return keys.map((key) => {
     const [tipologia, congelatoStr] = key.split("|") as [Tipologia, string];
     const congelato = congelatoStr === "true";
-    const tariffa = congelato ? costSettings.costo_congelato_storage : costSettings.costo_storage;
+    const tariffaDel = (day: number) => {
+      const t = costSettingsForDate(dayToISO(day), costSettings);
+      return congelato ? t.costo_congelato_storage : t.costo_storage;
+    };
     const equivalenza = (bancali: number) => (tipologia === "100x120" ? calculateEquivalence(bancali) : bancali);
 
     // Bancali totali per giorno
@@ -189,27 +195,27 @@ function groupMonth(righe: RowMonthStorage[], costSettings: CostSettings): Group
         })
       );
 
-    // Comprimi i giorni consecutivi con lo stesso totale in periodi
+    // Comprimi i giorni consecutivi con lo stesso totale e la stessa tariffa in periodi
     const days = Array.from(perDay.keys()).sort((a, b) => a - b);
     const periodi: GroupPeriod[] = [];
     days.forEach((day) => {
       const bancali = perDay.get(day)!;
+      const tariffa = tariffaDel(day);
       const last = periodi[periodi.length - 1];
-      if (last && last.bancali === bancali && toDayIndex(last.al)! === day - 1) {
+      if (last && last.bancali === bancali && last.tariffa === tariffa && toDayIndex(last.al)! === day - 1) {
         last.al = dayToISO(day);
         last.giorni += 1;
       } else {
-        periodi.push({ dal: dayToISO(day), al: dayToISO(day), giorni: 1, bancali, equivalenti: equivalenza(bancali), costo: 0 });
+        periodi.push({ dal: dayToISO(day), al: dayToISO(day), giorni: 1, bancali, equivalenti: equivalenza(bancali), tariffa, costo: 0 });
       }
     });
     periodi.forEach((p) => {
-      p.costo = p.giorni * p.equivalenti * tariffa;
+      p.costo = p.giorni * p.equivalenti * p.tariffa;
     });
 
     return {
       tipologia,
       congelato,
-      tariffa,
       periodi,
       giorniBancale: periodi.reduce((sum, p) => sum + p.giorni * p.equivalenti, 0),
       costo: periodi.reduce((sum, p) => sum + p.costo, 0),

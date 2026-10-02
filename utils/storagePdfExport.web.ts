@@ -3,10 +3,10 @@ import { autoTable } from "jspdf-autotable";
 import { STORAGE_PDF_DETAIL_HEAD, STORAGE_PDF_TOTAL_HEAD, StoragePdfReport } from "@/utils/storagePdf";
 
 /** Colonne numeriche (Giorni, Bancali, Equiv., Costo) */
-const RIGHT_ALIGNED = new Set([1, 4, 5, 6]);
+const RIGHT_ALIGNED = new Set([1, 4, 5, 6, 7]);
 
 const MARGIN = 14;
-const COLUMN_WIDTHS = [50, 15, 20, 22, 20, 16];
+const COLUMN_WIDTHS = [44, 13, 18, 20, 18, 14, 23];
 
 /** Sottotitolo + tabella; restituisce la y finale */
 function drawTable(doc: jsPDF, y: number, title: string, head: string[], rows: string[][], bold: boolean): number {
@@ -27,7 +27,7 @@ function drawTable(doc: jsPDF, y: number, title: string, head: string[], rows: s
   COLUMN_WIDTHS.forEach((width, i) => {
     columnStyles[i] = { cellWidth: width, halign: RIGHT_ALIGNED.has(i) ? "right" : "left" };
   });
-  columnStyles[6] = { halign: "right" };
+  columnStyles[7] = { halign: "right" };
 
   autoTable(doc, {
     startY: y + 3.5,

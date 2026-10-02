@@ -6,7 +6,8 @@ import { formatCurrency, formatDate } from "@/utils/calculations";
 import { createShadowStyle } from "@/utils/shadowStyles";
 import { calculateEquivalence, formatMonth } from "@/utils/calculations";
 import { DocumentMonthStorage } from "@/utils/storageCalculation";
-import StorageMonthTable, { splitByRegime } from "@/components/StorageMonthTable";
+import StorageMonthTable, { splitByRegime, formatTariffa } from "@/components/StorageMonthTable";
+import { tariffPeriodLabel } from "@/utils/tariffs";
 import { useSettingsStore } from "@/store/settingsStore";
 import { buildDocumentStoragePdf } from "@/utils/storagePdf";
 import { exportStoragePdf } from "@/utils/storagePdfExport";
@@ -30,8 +31,9 @@ interface DocumentReportModalProps {
     costiIngresso: number;
     costiUscita: number;
     costiStoccaggio: number;
-    tutteUscite: Array<{ data: string; bancali: number; giorni: number | null }>;
+    tutteUscite: Array<{ data: string; bancali: number; giorni: number | null; tariffa?: number; costo?: number; congelato?: boolean }>;
     stoccaggioMensile?: DocumentMonthStorage[];
+    tariffeIngresso?: Array<{ periodo: string; tariffaAmbient: number; tariffaCongelato: number; costo: number }>;
   } | null;
 }
 
@@ -114,6 +116,24 @@ export default function DocumentReportModal({
   // Stoccaggio raggruppato per mese
   const stoccaggioMensile = report.stoccaggioMensile || [];
   const stoccaggioPerRegime = splitByRegime(stoccaggioMensile);
+  
+  // Tariffe di stoccaggio applicate (per evidenziare una variazione di prezzo)
+  const tariffeStoccaggio: Array<{ periodo: string; ambient?: number; congelato?: number }> = [];
+  stoccaggioMensile.forEach(entry =>
+    entry.gruppi.forEach(g =>
+      g.periodi.forEach(p => {
+        const periodo = tariffPeriodLabel(p.dal);
+        let item = tariffeStoccaggio.find(t => t.periodo === periodo);
+        if (!item) {
+          item = { periodo };
+          tariffeStoccaggio.push(item);
+        }
+        if (g.congelato) item.congelato = p.tariffa;
+        else item.ambient = p.tariffa;
+      })
+    )
+  );
+  const tariffeIngresso = report.tariffeIngresso || [];
 
   return (
     <Modal
@@ -211,6 +231,12 @@ export default function DocumentReportModal({
                     {formatCurrency(report.costiIngresso)}
                   </Text>
                 </View>
+                {tariffeIngresso.map(t => (
+                  <Text key={t.periodo} style={[styles.tariffNote, tariffeIngresso.length > 1 && styles.tariffChange]}>
+                    Tariffa ingresso {t.periodo}: ambient {formatCurrency(t.tariffaAmbient)} · congelato {formatCurrency(t.tariffaCongelato)} per bancale eq.
+                    {tariffeIngresso.length > 1 ? ` → ${formatCurrency(t.costo)}` : ""}
+                  </Text>
+                ))}
                 <View style={styles.costRow}>
                   <ArrowUpFromLine size={16} color={colors.warning} />
                   <Text style={styles.costLabel}>Costo Uscite:</Text>
@@ -249,6 +275,17 @@ export default function DocumentReportModal({
                     <Text style={styles.exportButtonText}>Esporta PDF</Text>
                   </TouchableOpacity>
                 </View>
+                {tariffeStoccaggio.length > 1 && (
+                  <View style={styles.tariffBox}>
+                    <Text style={styles.tariffBoxTitle}>Variazione tariffa di stoccaggio</Text>
+                    {tariffeStoccaggio.map(t => (
+                      <Text key={t.periodo} style={styles.tariffBoxText}>
+                        {t.periodo}:{t.ambient !== undefined ? ` ambient ${formatTariffa(t.ambient)}` : ""}
+                        {t.congelato !== undefined ? ` · congelato ${formatTariffa(t.congelato)}` : ""} al giorno per bancale eq.
+                      </Text>
+                    ))}
+                  </View>
+                )}
                 {stoccaggioMensile.map(entry => (
                   <View key={entry.mese} style={styles.storageMonth}>
                     <View style={styles.storageMonthHeader}>
@@ -274,37 +311,6 @@ export default function DocumentReportModal({
               </View>
             )}
 
-            {/* Dettagli Ingressi */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Dettagli Ingressi</Text>
-              {report.rows.map((row, index) => {
-                const is100x120 = row.tipologia_bancali_ingresso.toUpperCase() === '100X120';
-                const isCongelato = row.note.toUpperCase().includes('CONGELATO');
-                
-                return (
-                  <View key={`row-${row.id}-${index}-${row.data_ingresso}`} style={styles.detailCard}>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Data Ingresso:</Text>
-                      <Text style={styles.detailValue}>{formatDate(row.data_ingresso)}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Bancali:</Text>
-                      <Text style={styles.detailValue}>
-                        {row.numero_bancali_ingresso} {is100x120 ? '100x120' : '80x120'}
-                        {isCongelato && ' (Congelato)'}
-                      </Text>
-                    </View>
-                    {row.note && (
-                      <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Note:</Text>
-                        <Text style={styles.detailValue}>{row.note}</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
             {/* Dettagli Uscite */}
             {tutteUscite && (
               <View style={styles.section}>
@@ -323,6 +329,14 @@ export default function DocumentReportModal({
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Giorni in Stoccaggio:</Text>
                         <Text style={styles.detailValue}>{uscita.giorni} giorni</Text>
+                      </View>
+                    )}
+                    {uscita.tariffa !== undefined && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Tariffa uscita ({tariffPeriodLabel(uscita.data)}):</Text>
+                        <Text style={styles.detailValue}>
+                          {formatCurrency(uscita.tariffa)}{uscita.congelato ? " congelato" : ""} → {formatCurrency(uscita.costo || 0)}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -472,6 +486,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: colors.primary,
+  },
+  tariffNote: {
+    fontSize: 12,
+    color: colors.darkGray,
+    marginLeft: 24,
+  },
+  tariffChange: {
+    color: colors.warning,
+  },
+  tariffBox: {
+    backgroundColor: "#fef3c7",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  tariffBoxTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#92400e",
+    marginBottom: 4,
+  },
+  tariffBoxText: {
+    fontSize: 12,
+    color: "#92400e",
   },
   storageSectionHeader: {
     flexDirection: "row",

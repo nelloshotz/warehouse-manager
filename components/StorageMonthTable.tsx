@@ -12,6 +12,11 @@ export function formatDayMonth(iso: string): string {
   return `${day}/${month}`;
 }
 
+/** Tariffa giornaliera con tutte le cifre significative (es. 0,233333 €) */
+export function formatTariffa(value: number): string {
+  return `${value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} €`;
+}
+
 export function regimeLabel(congelato: boolean): string {
   return congelato ? "Congelato" : "Ambient";
 }
@@ -59,6 +64,7 @@ export default function StorageMonthTable({ entry }: StorageMonthTableProps) {
         <Text style={[styles.cell, styles.colRegime, styles.headerText]}>Regime</Text>
         <Text style={[styles.cell, styles.colNum, styles.headerText]}>Bancali</Text>
         <Text style={[styles.cell, styles.colNum]} />
+        <Text style={[styles.cell, styles.colTariffa]} />
         <Text style={[styles.cell, styles.colCosto]} />
       </View>
       {entry.righe.map((r) =>
@@ -72,6 +78,7 @@ export default function StorageMonthTable({ entry }: StorageMonthTableProps) {
             <RegimeBadge congelato={r.congelato} />
             <Text style={[styles.cell, styles.colNum]}>{p.bancali}</Text>
             <Text style={[styles.cell, styles.colNum]} />
+            <Text style={[styles.cell, styles.colTariffa]} />
             <Text style={[styles.cell, styles.colCosto]} />
           </View>
         ))
@@ -85,6 +92,7 @@ export default function StorageMonthTable({ entry }: StorageMonthTableProps) {
         <Text style={[styles.cell, styles.colRegime, styles.headerText]}>Regime</Text>
         <Text style={[styles.cell, styles.colNum, styles.headerText]}>Bancali tot.</Text>
         <Text style={[styles.cell, styles.colNum, styles.headerText]}>Equiv.</Text>
+        <Text style={[styles.cell, styles.colTariffa, styles.headerText]}>Tariffa</Text>
         <Text style={[styles.cell, styles.colCosto, styles.headerText]}>Costo</Text>
       </View>
       {entry.gruppi.map((g) =>
@@ -98,6 +106,7 @@ export default function StorageMonthTable({ entry }: StorageMonthTableProps) {
             <RegimeBadge congelato={g.congelato} />
             <Text style={[styles.cell, styles.colNum, styles.bold]}>{p.bancali}</Text>
             <Text style={[styles.cell, styles.colNum, styles.bold]}>{p.equivalenti}</Text>
+            <Text style={[styles.cell, styles.colTariffa]}>{formatTariffa(p.tariffa)}</Text>
             <Text style={[styles.cell, styles.colCosto, styles.bold]}>{formatCurrency(p.costo)}</Text>
           </View>
         ))
@@ -147,12 +156,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: 3,
   },
-  colPeriodo: { flex: 2.4 },
+  colPeriodo: { flex: 2.3 },
   colGiorni: { flex: 0.9, textAlign: "right" },
-  colTipo: { flex: 1.4 },
+  colTipo: { flex: 1.3 },
   colRegime: { flex: 1.6 },
   colNum: { flex: 1.1, textAlign: "right" },
-  colCosto: { flex: 1.6, textAlign: "right" },
+  colTariffa: { flex: 1.5, textAlign: "right" },
+  colCosto: { flex: 1.5, textAlign: "right" },
   badgeCell: {
     paddingHorizontal: 3,
     alignItems: "flex-start",
