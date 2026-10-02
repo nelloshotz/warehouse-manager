@@ -11,6 +11,15 @@ import { createShadowStyle } from "@/utils/shadowStyles";
 import * as FileSystem from "expo-file-system";
 import ValidationErrorsModal from "./ValidationErrorsModal";
 
+/** Alert visibile anche sul web (su react-native-web Alert.alert non mostra nulla) */
+function showAlert(title: string, message: string) {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message, [{ text: "OK" }]);
+  }
+}
+
 export default function ExcelFileProcessor() {
   const { 
     addUploadedFile, 
@@ -33,7 +42,9 @@ export default function ExcelFileProcessor() {
       setProgressMessage('Selezione file...');
       
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "text/plain"],
+        type: Platform.OS === "web"
+          ? [".csv", "text/csv"]
+          : ["text/csv", "text/comma-separated-values", "application/csv", "text/plain"],
         copyToCacheDirectory: true,
       });
       
@@ -43,6 +54,17 @@ export default function ExcelFileProcessor() {
       }
       
       const file = result.assets[0];
+      
+      // Si accettano solo file CSV: qualsiasi altro file viene rifiutato senza elaborarlo
+      if (!file.name || !file.name.toLowerCase().endsWith(".csv")) {
+        showAlert(
+          "File non valido",
+          `Il file "${file.name || "selezionato"}" non è un file CSV.\n\nCarica il file del magazzino in formato .csv.`
+        );
+        setLoading(false);
+        setProgressMessage('');
+        return;
+      }
       
       console.log('File selezionato:', {
         name: file.name,
@@ -332,11 +354,7 @@ export default function ExcelFileProcessor() {
       console.error("Errore durante la selezione del documento:", error);
       const errorMessage = error instanceof Error ? error.message : "Errore sconosciuto";
       setError(`Impossibile caricare il file: ${errorMessage}`);
-      Alert.alert(
-        "Errore di caricamento", 
-        `Impossibile caricare il file.\n\n${errorMessage}`,
-        [{ text: "OK" }]
-      );
+      showAlert("Errore di caricamento", `Impossibile caricare il file.\n\n${errorMessage}`);
     } finally {
       setLoading(false);
       setTimeout(() => setUploadProgress(0), 500);
@@ -358,7 +376,7 @@ export default function ExcelFileProcessor() {
       </View>
       
       <Text style={styles.description}>
-        Carica il tuo file Excel o csv del magazzino per elaborare ingressi, uscite e dati di stoccaggio.
+        Carica il file CSV del magazzino per elaborare ingressi, uscite e dati di stoccaggio.
         Il sistema eviterà di duplicare le righe dei documenti esistenti.
       </Text>
       
@@ -384,7 +402,7 @@ export default function ExcelFileProcessor() {
       <View style={styles.infoContainer}>
         <AlertCircle color={colors.info} size={16} />
         <Text style={styles.infoText}>
-          Formati supportati: .xls, .xlsx, .csv
+          Formato supportato: .csv
         </Text>
       </View>
     </View>

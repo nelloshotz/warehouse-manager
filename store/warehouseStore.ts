@@ -3,7 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { createStorage } from "@/utils/storage";
 import { Document, DocumentRow, EntrySummary, ExitSummary, StorageSummary, UploadedFile } from "@/types/warehouse";
 import { calculateEquivalence } from "@/utils/calculations";
+import { calculateDocumentStorage, calculateStorageByMonth, DocumentMonthStorage } from "@/utils/storageCalculation";
 import { useSettingsStore } from "./settingsStore";
+import { BILLED_STORAGE } from "@/constants/billedStorage";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 
@@ -37,7 +39,9 @@ interface WarehouseState {
     costiUscita: number;
     costiStoccaggio: number;
     tutteUscite: Array<{ data: string; bancali: number; giorni: number | null }>;
+    stoccaggioMensile: DocumentMonthStorage[];
   } | null>;
+  getStorageMonthDetail: (monthKey: string) => Promise<DocumentMonthStorage[]>;
   getStorageDetailsByMonth: (monthKey: string) => Promise<{
     pallets100x120: number;
     equivalentPallets: number;
@@ -353,7 +357,8 @@ export const useWarehouseStore = create<WarehouseState>()(
             costiIngresso: 0,
             costiUscita: 0,
             costiStoccaggio: 0,
-            tutteUscite: []
+            tutteUscite: [],
+            stoccaggioMensile: []
           };
         }
         
@@ -455,91 +460,11 @@ export const useWarehouseStore = create<WarehouseState>()(
           // Calcola bancali rimanenti
           const rimanenti = row.numero_bancali_ingresso - bancaliUsciti;
           bancaliRimanenti += rimanenti;
-          
-          // Calcola costi stoccaggio per questa riga
-          // IMPORTANTE: Calcola i costi per TUTTI i bancali che sono stati in stoccaggio,
-          // non solo quelli rimanenti. Per ogni uscita, calcola i costi fino alla data di uscita.
-          const inDate = new Date(row.data_ingresso);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          if (inDate <= today) {
-            // Se ci sono uscite, calcola i costi per ogni periodo
-            const usciteOrdinate = Object.entries(row.uscite)
-              .filter(([_, uscita]) => uscita.data && uscita.bancali > 0)
-              .map(([_, uscita]) => ({
-                data: new Date(uscita.data),
-                bancali: uscita.bancali
-              }))
-              .sort((a, b) => a.data.getTime() - b.data.getTime());
-            
-            if (usciteOrdinate.length > 0) {
-              // Calcola i costi per ogni periodo tra ingresso e uscite
-              let stockAttuale = row.numero_bancali_ingresso;
-              
-              usciteOrdinate.forEach((uscita, idx) => {
-                // Periodo da ingresso (o ultima uscita) a questa uscita
-                const dataInizio = idx === 0 ? inDate : usciteOrdinate[idx - 1].data;
-                const dataFine = uscita.data;
-                const giorni = Math.floor((dataFine.getTime() - dataInizio.getTime()) / (1000 * 60 * 60 * 24));
-                
-                if (giorni > 0 && stockAttuale > 0) {
-                  // Calcola equivalenza per il periodo
-                  let equivalenzaStoccaggio = 0;
-                  if (is100x120) {
-                    equivalenzaStoccaggio = calculateEquivalence(stockAttuale);
-                  } else {
-                    equivalenzaStoccaggio = stockAttuale;
-                  }
-                  
-                  // Calcola costo stoccaggio per questo periodo
-                  const storageRate = isCongelato
-                    ? costSettings.costo_congelato_storage
-                    : costSettings.costo_storage;
-                  costiStoccaggio += giorni * equivalenzaStoccaggio * storageRate;
-                }
-                
-                // Aggiorna stock dopo l'uscita
-                stockAttuale = Math.max(0, stockAttuale - uscita.bancali);
-              });
-              
-              // Se ci sono ancora bancali rimanenti, calcola i costi fino ad oggi
-              if (stockAttuale > 0) {
-                const ultimaUscita = usciteOrdinate[usciteOrdinate.length - 1].data;
-                const giorniRimanenti = Math.floor((today.getTime() - ultimaUscita.getTime()) / (1000 * 60 * 60 * 24));
-                
-                if (giorniRimanenti > 0) {
-                  let equivalenzaStoccaggio = 0;
-                  if (is100x120) {
-                    equivalenzaStoccaggio = calculateEquivalence(stockAttuale);
-                  } else {
-                    equivalenzaStoccaggio = stockAttuale;
-                  }
-                  
-                  const storageRate = isCongelato
-                    ? costSettings.costo_congelato_storage
-                    : costSettings.costo_storage;
-                  costiStoccaggio += giorniRimanenti * equivalenzaStoccaggio * storageRate;
-                }
-              }
-            } else {
-              // Nessuna uscita: calcola i costi dall'ingresso ad oggi
-              const giorniStoccaggio = Math.floor((today.getTime() - inDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              
-              let equivalenzaStoccaggio = 0;
-              if (is100x120) {
-                equivalenzaStoccaggio = calculateEquivalence(row.numero_bancali_ingresso);
-              } else {
-                equivalenzaStoccaggio = row.numero_bancali_ingresso;
-              }
-              
-              const storageRate = isCongelato
-                ? costSettings.costo_congelato_storage
-                : costSettings.costo_storage;
-              costiStoccaggio += giorniStoccaggio * equivalenzaStoccaggio * storageRate;
-            }
-          }
         });
+        
+        // Stoccaggio mese per mese (stesso calcolo della tabella mensile)
+        const stoccaggioMensile = calculateDocumentStorage(document.numero_documento, rows, costSettings);
+        costiStoccaggio = stoccaggioMensile.reduce((sum, entry) => sum + entry.costo, 0);
         
         // Ordina le uscite per data
         tutteUscite.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
@@ -568,8 +493,21 @@ export const useWarehouseStore = create<WarehouseState>()(
           costiIngresso,
           costiUscita,
           costiStoccaggio,
-          tutteUscite
+          tutteUscite,
+          stoccaggioMensile
         };
+      },
+      
+      getStorageMonthDetail: async (monthKey) => {
+        const jsonData = await get().loadDataFromJSON();
+        const documentRows = jsonData?.documentRows || get().documentRows;
+        const documents = jsonData?.documents || get().documents;
+        const { costSettings } = useSettingsStore.getState();
+        
+        // Le righe entrate dopo il mese non possono contribuire
+        const rowsUpToMonth = documentRows.filter(row => (row.data_ingresso || "").substring(0, 7) <= monthKey);
+        const byMonth = calculateStorageByMonth(documents, rowsUpToMonth, costSettings);
+        return (byMonth.get(monthKey) || []).sort((a, b) => b.costo - a.costo);
       },
       
       getStorageDetailsByMonth: async (monthKey) => {
@@ -1014,226 +952,32 @@ export const useWarehouseStore = create<WarehouseState>()(
         
         console.log(`Uscite processate: ${processedExits} uscite, ${skippedExits} scartate, ${exitSummariesMap.size} mesi unici, mesi: ${Array.from(exitMonthKeys).sort().join(', ')}`);
         
-        // Calcola i riepiloghi di stoccaggio con la formula corretta:
-        // (Numero di bancali equivalenti × Costo di stoccaggio per bancale) × Numero di giorni in stoccaggio
+        // Calcola i riepiloghi di stoccaggio mese per mese (vedi utils/storageCalculation.ts)
         const storageSummariesMap = new Map<string, StorageSummary>();
-        
-        // Elabora ogni riga del documento
-        documentRows.forEach(row => {
-          const inDate = new Date(row.data_ingresso);
-          
-          // Verifica che la data sia valida
-          if (isNaN(inDate.getTime())) {
-            console.warn('Data ingresso non valida:', row.data_ingresso);
-            return;
-          }
-          
-          // LOG DETTAGLIATO PER 2025/7599 - STOCCAGGIO
-          const isRefRow = refDocument && row.documento_id === refDocument.id;
-          if (isRefRow) {
-            console.log(`\n[2025/7599 STOCCAGGIO] Riga ID ${row.id}:`);
-            console.log(`  - Data ingresso: ${row.data_ingresso}`);
-            console.log(`  - Bancali ingresso: ${row.numero_bancali_ingresso} (${row.tipologia_bancali_ingresso})`);
-            const usciteCount = Object.values(row.uscite).filter(u => u.data && u.bancali > 0).length;
-            console.log(`  - Numero uscite: ${usciteCount}`);
-          }
-          
-          // Calcola lo stock iniziale in bancali equivalenti
-          const is100x120 = row.tipologia_bancali_ingresso.toUpperCase() === '100X120';
-          
-          // Tieni traccia dei bancali rimanenti per tipo per un calcolo accurato dell'equivalenza
-          let remaining100x120 = is100x120 ? row.numero_bancali_ingresso : 0;
-          let remaining80x120 = !is100x120 ? row.numero_bancali_ingresso : 0;
-          
-          // Raccogli tutte le uscite e ordinale per data
-          const uscite = Object.entries(row.uscite)
-            .map(([_, uscita]) => ({
-              data: uscita.data ? new Date(uscita.data) : null,
-              bancali: uscita.bancali,
-            }))
-            .filter(uscita => uscita.data && !isNaN(uscita.data.getTime()))
-            .sort((a, b) => {
-              if (!a.data || !b.data) return 0;
-              return a.data.getTime() - b.data.getTime();
-            });
-          
-          // Genera tutti i mesi dalla data di ingresso a oggi
-          // Usa UTC per evitare problemi di fuso orario (coerente con le date parse dal JSON)
-          const now = new Date();
-          const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-          const months = [];
-          let currentDate = new Date(inDate.getFullYear(), inDate.getMonth(), 1);
-          
-          while (currentDate <= today) {
-            months.push(new Date(currentDate));
-            currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-          }
-          
-          // Per ogni mese, calcola lo stoccaggio
-          months.forEach(month => {
-            const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-            const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-            
-            // Verifica se questo è il mese corrente
-            const isCurrentMonth = month.getFullYear() === today.getUTCFullYear() && 
-                                   month.getMonth() === today.getUTCMonth();
-            const endDay = isCurrentMonth ? today.getUTCDate() : daysInMonth;
-            
-            // Inizializza il riepilogo del mese se non esiste
-            let summary = storageSummariesMap.get(monthKey) || {
-              mese: monthKey,
-              stock_medio: 0,
-              giorni_totali: 0,
-              costo_storage: 0,
-            };
-            
-            // Calcola lo stock iniziale per questo mese applicando tutte le uscite precedenti
-            // Prima di questo mese
-            let stockAtStartOfMonth = remaining100x120 + remaining80x120;
-            let equivalentPalletsAtStart = is100x120
-              ? calculateEquivalence(remaining100x120)
-              : remaining80x120;
-            
-            // Applica tutte le uscite che sono avvenute prima di questo mese
-            const monthStart = new Date(Date.UTC(month.getFullYear(), month.getMonth(), 1));
-            uscite.forEach(uscita => {
-              if (!uscita.data) return;
-              
-                // Se l'uscita è avvenuta prima di questo mese, applicala
-              if (uscita.data < monthStart) {
-                if (isRefRow) {
-                  console.log(`    - Uscita PRIMA del mese ${monthKey}: ${uscita.bancali} bancali il ${uscita.data.toISOString().split('T')[0]}`);
-                }
-                if (is100x120) {
-                  remaining100x120 = Math.max(0, remaining100x120 - uscita.bancali);
-                } else {
-                  remaining80x120 = Math.max(0, remaining80x120 - uscita.bancali);
-                }
-                // Ricalcola l'equivalenza
-                equivalentPalletsAtStart = is100x120
-                  ? calculateEquivalence(remaining100x120)
-                  : remaining80x120;
-                if (isRefRow) {
-                  console.log(`      → Stock aggiornato: ${remaining100x120 + remaining80x120} bancali (equiv: ${equivalentPalletsAtStart.toFixed(2)})`);
-                }
-              }
-            });
-            
-            // Calcola i giorni in questo mese per questa riga
-            let startDay = 1;
-            if (month.getMonth() === inDate.getUTCMonth() && month.getFullYear() === inDate.getUTCFullYear()) {
-              startDay = inDate.getUTCDate();
-            }
-            
-            // LOG DETTAGLIATO PER 2025/7599 - STOCCAGGIO MESE
-            if (isRefRow) {
-              console.log(`  [Mese ${monthKey}]`);
-              console.log(`    - Stock iniziale mese: ${stockAtStartOfMonth} bancali (${remaining100x120} 100x120, ${remaining80x120} 80x120)`);
-              console.log(`    - Equivalenza iniziale: ${equivalentPalletsAtStart.toFixed(2)}`);
-              console.log(`    - Giorni considerati: dal giorno ${startDay} al giorno ${endDay}`);
-            }
-            
-            // Tieni traccia delle variazioni giornaliere dello stock all'interno del mese
-            const dailyStock = Array(daysInMonth + 1).fill(0);
-            
-            // Inizializza lo stock giornaliero con lo stock all'inizio del mese
-            let currentEquivalentPallets = equivalentPalletsAtStart;
-            let currentRemaining100x120 = remaining100x120;
-            let currentRemaining80x120 = remaining80x120;
-            
-            for (let day = startDay; day <= endDay; day++) {
-              dailyStock[day] = currentEquivalentPallets;
-            }
-            
-            // Applica le uscite che si verificano in questo mese (fino ad oggi se mese corrente)
-            const monthEnd = isCurrentMonth 
-              ? new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999))
-              : new Date(Date.UTC(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999));
-            uscite.forEach(uscita => {
-              if (!uscita.data) return;
-              
-              // Se l'uscita è avvenuta in questo mese (e fino ad oggi se mese corrente)
-              if (uscita.data >= monthStart && uscita.data <= monthEnd) {
-                const exitDay = uscita.data.getUTCDate();
-                
-                // Se siamo nel mese corrente e l'uscita è dopo oggi, salta
-                if (isCurrentMonth && exitDay > today.getUTCDate()) {
-                  return;
-                }
-                
-                // Calcola quanti bancali equivalenti vengono rimossi
-                let exitEquivalentPallets;
-                if (is100x120) {
-                  // Per i bancali 100x120, dobbiamo ricalcolare l'equivalenza
-                  // dei bancali rimanenti dopo l'uscita
-                  const beforeExit = currentRemaining100x120;
-                  currentRemaining100x120 = Math.max(0, currentRemaining100x120 - uscita.bancali);
-                  
-                  // Calcola la differenza in bancali equivalenti
-                  const beforeEquiv = calculateEquivalence(beforeExit);
-                  const afterEquiv = calculateEquivalence(currentRemaining100x120);
-                  exitEquivalentPallets = beforeEquiv - afterEquiv;
-                } else {
-                  // Per i bancali 80x120, è un rapporto 1:1
-                  exitEquivalentPallets = uscita.bancali;
-                  currentRemaining80x120 = Math.max(0, currentRemaining80x120 - uscita.bancali);
-                }
-                
-                // Aggiorna i bancali equivalenti dopo questa uscita
-                currentEquivalentPallets = Math.max(0, currentEquivalentPallets - exitEquivalentPallets);
-                
-                // Aggiorna lo stock giornaliero dal giorno DOPO l'uscita fino alla fine del periodo considerato
-                // Il giorno dell'uscita viene conteggiato con lo stock PRIMA dell'uscita
-                const maxDay = isCurrentMonth ? today.getUTCDate() : daysInMonth;
-                for (let day = exitDay + 1; day <= maxDay; day++) {
-                  dailyStock[day] = currentEquivalentPallets;
-                }
-                
-                if (isRefRow) {
-                  console.log(`    - Uscita DURANTE il mese ${monthKey}: ${uscita.bancali} bancali il giorno ${exitDay}`);
-                  console.log(`      → Equivalenza rimossa: ${exitEquivalentPallets.toFixed(2)}`);
-                  console.log(`      → Stock dopo uscita: ${currentRemaining100x120 + currentRemaining80x120} bancali (equiv: ${currentEquivalentPallets.toFixed(2)})`);
-                }
-              }
-            });
-            
-            // Calcola i giorni-bancale totali e il costo di stoccaggio per questa riga in questo mese
-            // Per il mese corrente, conta solo fino ad oggi
-            let totalPalletDays = 0;
-            for (let day = startDay; day <= endDay; day++) {
-              totalPalletDays += dailyStock[day];
-            }
-            
-            // Calcola lo stock medio per questa riga in questo mese
-            const daysActive = endDay - startDay + 1;
-            const avgStock = daysActive > 0 ? totalPalletDays / daysActive : 0;
-            
-            // Calcola il costo di stoccaggio utilizzando la formula corretta:
-            // (Numero di bancali equivalenti × Costo di stoccaggio per bancale) × Numero di giorni in stoccaggio
-            // Stiamo utilizzando i valori di stock giornalieri per ottenere costi accurati
-            const storageRate = row.note.toUpperCase().includes("CONGELATO")
-              ? costSettings.costo_congelato_storage
-              : costSettings.costo_storage;
-            const storageCost = totalPalletDays * storageRate;
-            
-            if (isRefRow) {
-              console.log(`    - Stock medio mese: ${avgStock.toFixed(2)} bancali equivalenti`);
-              console.log(`    - Giorni totali: ${daysActive}`);
-              console.log(`    - Totale giorni-bancale: ${totalPalletDays.toFixed(2)}`);
-              console.log(`    - Costo storage questo mese: €${storageCost.toFixed(2)} (${totalPalletDays.toFixed(2)} × €${storageRate})`);
-            }
-            
-            // Aggiorna il riepilogo
-            summary.stock_medio += avgStock;
-            summary.giorni_totali += daysActive;
-            summary.costo_storage += storageCost;
-            
-            storageSummariesMap.set(monthKey, summary);
-            
-            // Aggiorna i valori rimanenti per il prossimo mese
-            remaining100x120 = currentRemaining100x120;
-            remaining80x120 = currentRemaining80x120;
+        const now = new Date();
+        const currentMonthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+        calculateStorageByMonth(documents, documentRows, costSettings).forEach((entries, monthKey) => {
+          const [y, m] = monthKey.split('-').map(Number);
+          // Giorni del mese conteggiati (il mese corrente fino ad oggi)
+          const giorniMese = monthKey === currentMonthKey ? now.getUTCDate() : new Date(Date.UTC(y, m, 0)).getUTCDate();
+          const summary: StorageSummary = { mese: monthKey, stock_medio: 0, giorni_totali: 0, costo_storage: 0 };
+          let giorniBancale = 0;
+          entries.forEach(entry => {
+            entry.gruppi.forEach(g => { giorniBancale += g.giorniBancale; });
+            entry.righe.forEach(r => { summary.giorni_totali += r.giorniConteggiati; });
+            summary.costo_storage += entry.costo;
           });
+          // Stock medio = bancali equivalenti medi presenti nel mese
+          summary.stock_medio = giorniMese > 0 ? giorniBancale / giorniMese : 0;
+          storageSummariesMap.set(monthKey, summary);
+        });
+        
+        // Mesi già fatturati: il totale mostrato è l'importo fatturato
+        Object.entries(BILLED_STORAGE).forEach(([monthKey, importo]) => {
+          const summary = storageSummariesMap.get(monthKey) || { mese: monthKey, stock_medio: 0, giorni_totali: 0, costo_storage: 0 };
+          summary.costo_storage = importo;
+          summary.fatturato = true;
+          storageSummariesMap.set(monthKey, summary);
         });
         
         if (refDocument && refRows.length > 0) {

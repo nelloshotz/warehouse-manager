@@ -59,6 +59,8 @@ export interface StorageSummary {
   stock_medio: number;
   giorni_totali: number;
   costo_storage: number;
+  /** true se costo_storage è l'importo fatturato (constants/billedStorage.ts) */
+  fatturato?: boolean;
 }
 
 export interface UploadedFile {

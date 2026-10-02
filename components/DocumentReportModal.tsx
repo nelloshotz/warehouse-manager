@@ -1,10 +1,15 @@
-import React from "react";
-import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 import { colors } from "@/constants/colors";
-import { X, FileText, ArrowDownToLine, ArrowUpFromLine, Clock, Package } from "lucide-react-native";
+import { X, FileText, ArrowDownToLine, ArrowUpFromLine, Clock, Package, Download } from "lucide-react-native";
 import { formatCurrency, formatDate } from "@/utils/calculations";
 import { createShadowStyle } from "@/utils/shadowStyles";
-import { calculateEquivalence } from "@/utils/calculations";
+import { calculateEquivalence, formatMonth } from "@/utils/calculations";
+import { DocumentMonthStorage } from "@/utils/storageCalculation";
+import StorageMonthTable, { splitByRegime } from "@/components/StorageMonthTable";
+import { useSettingsStore } from "@/store/settingsStore";
+import { buildDocumentStoragePdf } from "@/utils/storagePdf";
+import { exportStoragePdf } from "@/utils/storagePdfExport";
 
 interface DocumentReportModalProps {
   visible: boolean;
@@ -26,6 +31,7 @@ interface DocumentReportModalProps {
     costiUscita: number;
     costiStoccaggio: number;
     tutteUscite: Array<{ data: string; bancali: number; giorni: number | null }>;
+    stoccaggioMensile?: DocumentMonthStorage[];
   } | null;
 }
 
@@ -34,7 +40,23 @@ export default function DocumentReportModal({
   onClose,
   report,
 }: DocumentReportModalProps) {
+  const { costSettings } = useSettingsStore();
+  const [exporting, setExporting] = useState(false);
+
   if (!report) return null;
+
+  const handleExportStorage = async () => {
+    setExporting(true);
+    try {
+      await exportStoragePdf(
+        buildDocumentStoragePdf(report.document.numero_documento, report.stoccaggioMensile || [], costSettings)
+      );
+    } catch (error: any) {
+      alert(`Impossibile creare il PDF: ${error?.message || String(error)}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Calcola tipologie bancali
   const bancali100x120 = report.rows.reduce((sum, row) => {
@@ -88,6 +110,10 @@ export default function DocumentReportModal({
 
   const totaleCosti = report.costiIngresso + report.costiUscita + report.costiStoccaggio;
   const tutteUscite = report.tutteUscite.length > 0;
+
+  // Stoccaggio raggruppato per mese
+  const stoccaggioMensile = report.stoccaggioMensile || [];
+  const stoccaggioPerRegime = splitByRegime(stoccaggioMensile);
 
   return (
     <Modal
@@ -208,6 +234,45 @@ export default function DocumentReportModal({
                 </View>
               </View>
             </View>
+
+            {/* Stoccaggio mese per mese */}
+            {stoccaggioMensile.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.storageSectionHeader}>
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Stoccaggio mese per mese</Text>
+                  <TouchableOpacity style={styles.exportButton} onPress={handleExportStorage} disabled={exporting}>
+                    {exporting ? (
+                      <ActivityIndicator size="small" color={colors.card} />
+                    ) : (
+                      <Download size={16} color={colors.card} />
+                    )}
+                    <Text style={styles.exportButtonText}>Esporta PDF</Text>
+                  </TouchableOpacity>
+                </View>
+                {stoccaggioMensile.map(entry => (
+                  <View key={entry.mese} style={styles.storageMonth}>
+                    <View style={styles.storageMonthHeader}>
+                      <Text style={styles.storageMonthTitle}>{formatMonth(entry.mese)}</Text>
+                      <Text style={styles.storageMonthTitle}>{formatCurrency(entry.costo)}</Text>
+                    </View>
+                    <StorageMonthTable entry={entry} />
+                  </View>
+                ))}
+                <View style={styles.divider} />
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>di cui ambient</Text>
+                  <Text style={styles.detailValue}>{formatCurrency(stoccaggioPerRegime.ambient)}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>di cui congelato</Text>
+                  <Text style={styles.detailValue}>{formatCurrency(stoccaggioPerRegime.congelato)}</Text>
+                </View>
+                <View style={styles.costRow}>
+                  <Text style={styles.totalCostLabel}>Totale stoccaggio documento</Text>
+                  <Text style={styles.totalCostValue}>{formatCurrency(report.costiStoccaggio)}</Text>
+                </View>
+              </View>
+            )}
 
             {/* Dettagli Ingressi */}
             <View style={styles.section}>
@@ -407,6 +472,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: colors.primary,
+  },
+  storageSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  exportButtonText: {
+    color: colors.card,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  storageMonth: {
+    marginBottom: 16,
+  },
+  storageMonthHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  storageMonthTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    textTransform: "capitalize",
   },
   divider: {
     height: 1,

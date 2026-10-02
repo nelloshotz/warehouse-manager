@@ -9,6 +9,7 @@ import StorageChart from "@/components/StorageChart";
 import { formatCurrency, formatMonth } from "@/utils/calculations";
 import StorageDetailView from "@/components/StorageDetailView";
 import AppLayout from "@/components/AppLayout";
+import { StorageSummary } from "@/types/warehouse";
 import DocumentReportModal from "@/components/DocumentReportModal";
 
 export default function StorageScreen() {
@@ -64,7 +65,12 @@ export default function StorageScreen() {
     {
       key: "costo_storage",
       title: "Costo Stoccaggio",
-      render: (value: number) => <Text style={styles.costText}>{formatCurrency(value)}</Text>,
+      render: (value: number, item: StorageSummary) => (
+        <View>
+          <Text style={styles.costText}>{formatCurrency(value)}</Text>
+          {item.fatturato && <Text style={styles.billedLabel}>Fatturato</Text>}
+        </View>
+      ),
     },
   ];
   
@@ -245,6 +251,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.darkGray,
     marginBottom: 12,
+  },
+  billedLabel: {
+    fontSize: 11,
+    color: colors.darkGray,
   },
   costText: {
     color: colors.secondary,
