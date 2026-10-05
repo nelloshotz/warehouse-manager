@@ -1,18 +1,16 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
-import type { RawMaterialRow } from "@/utils/rawMaterialsReport";
-import { formatGiacenzaForPdf, formatTotaleForPdf, rowsForPdf } from "@/utils/rawMaterialsReportPdf";
+import type { FinishedProductRow } from "@/utils/finishedProductsReport";
+import { formatGiacenzaForPdf, formatTotaleForPdf } from "@/utils/finishedProductsReportPdf";
 
 /**
  * PDF costruito dai dati (jsPDF), senza window.print sulla pagina app.
- * Su web expo-print ignora l’HTML e stampa solo l’intera finestra.
+ * Su web expo-print ignora l'HTML e stampa solo l'intera finestra.
  */
-export function downloadRawMaterialsReportPdfWeb(
-  reportRows: RawMaterialRow[],
-  catalog: string[]
+export function downloadFinishedProductsReportPdfWeb(
+  reportRows: FinishedProductRow[]
 ): void {
-  const data = rowsForPdf(reportRows, catalog);
-  const totalGiacenza = data.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+  const totalGiacenza = reportRows.reduce((sum, row) => sum + row.giacenza_bancali, 0);
   
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const margin = 14;
@@ -20,7 +18,7 @@ export function downloadRawMaterialsReportPdfWeb(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("Report Giacenza Materie Prime", margin, y);
+  doc.text("Report Giacenza Prodotti Finiti", margin, y);
   y += 8;
 
   doc.setFont("helvetica", "normal");
@@ -31,14 +29,14 @@ export function downloadRawMaterialsReportPdfWeb(
     month: "2-digit",
     year: "numeric",
   });
-  doc.text(`Generato il ${dateStr} · ${data.length} prodotti`, margin, y);
+  doc.text(`Generato il ${dateStr} · ${reportRows.length} prodotti`, margin, y);
   y += 10;
   doc.setTextColor(0, 0, 0);
 
   autoTable(doc, {
     startY: y,
     head: [["Prodotto", "Giacenza"]],
-    body: data.map((r) => [r.nome_materia_prima, formatGiacenzaForPdf(r.giacenza_bancali)]),
+    body: reportRows.map((r) => [r.nome_prodotto, formatGiacenzaForPdf(r.giacenza_bancali)]),
     foot: [["TOTALE", formatTotaleForPdf(totalGiacenza)]],
     showHead: "everyPage",
     showFoot: "lastPage",
@@ -50,7 +48,7 @@ export function downloadRawMaterialsReportPdfWeb(
       fontStyle: "bold",
     },
     footStyles: {
-      fillColor: [59, 130, 246],
+      fillColor: [249, 115, 22],
       textColor: [255, 255, 255],
       fontStyle: "bold",
       fontSize: 10,
@@ -62,6 +60,6 @@ export function downloadRawMaterialsReportPdfWeb(
     margin: { left: margin, right: margin },
   });
 
-  const fname = `report-giacenza-materie-prime-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const fname = `report-giacenza-prodotti-finiti-${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fname);
 }

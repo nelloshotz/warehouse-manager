@@ -15,21 +15,23 @@ import * as FileSystem from "expo-file-system";
 import AppLayout from "@/components/AppLayout";
 import { colors } from "@/constants/colors";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { Download, FileBarChart, RefreshCw, Settings } from "lucide-react-native";
-import { buildRawMaterialsReportFromCsv, RawMaterialRow } from "@/utils/rawMaterialsReport";
-import { buildReportPdfHtml } from "@/utils/rawMaterialsReportPdf";
-import { downloadRawMaterialsReportPdfWeb } from "@/utils/rawMaterialsReportPdfDownload";
+import { Download, Package, RefreshCw, Settings } from "lucide-react-native";
+import { buildFinishedProductsReportFromCsv, FinishedProductRow } from "@/utils/finishedProductsReport";
+import { buildReportPdfHtml } from "@/utils/finishedProductsReportPdf";
+import { downloadFinishedProductsReportPdfWeb } from "@/utils/finishedProductsReportPdfDownload.web";
 import { useRawMaterialsProductsStore } from "@/store/rawMaterialsProductsStore";
-import RawMaterialsProductsEditModal from "@/components/RawMaterialsProductsEditModal";
+import { useFinishedProductsExcludedStore } from "@/store/finishedProductsExcludedStore";
+import FinishedProductsExcludedModal from "@/components/FinishedProductsExcludedModal";
 
-export default function RawMaterialsStockScreen() {
+export default function FinishedProductsStockScreen() {
   const { uploadedFiles } = useWarehouseStore();
-  const products = useRawMaterialsProductsStore((state) => state.products);
+  const rawMaterialsProducts = useRawMaterialsProductsStore((state) => state.products);
+  const excludedProducts = useFinishedProductsExcludedStore((state) => state.excludedProducts);
   const [exporting, setExporting] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
-  const [reportRows, setReportRows] = useState<RawMaterialRow[]>([]);
+  const [reportRows, setReportRows] = useState<FinishedProductRow[]>([]);
   const [reportError, setReportError] = useState<string | null>(null);
-  const [productsEditVisible, setProductsEditVisible] = useState(false);
+  const [excludedModalVisible, setExcludedModalVisible] = useState(false);
 
   const latestCsvFile = useMemo(() => {
     const csvFiles = uploadedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
@@ -40,9 +42,10 @@ export default function RawMaterialsStockScreen() {
   }, [uploadedFiles]);
 
   const loadReport = async () => {
-    const catalog = Array.isArray(products) ? products : [];
+    const rawMaterials = Array.isArray(rawMaterialsProducts) ? rawMaterialsProducts : [];
+    const excluded = Array.isArray(excludedProducts) ? excludedProducts : [];
     if (!latestCsvFile?.uri) {
-      setReportRows(catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportRows([]);
       setReportError("Nessun CSV caricato. Carica prima un file CSV dalla dashboard.");
       return;
     }
@@ -59,10 +62,10 @@ export default function RawMaterialsStockScreen() {
         csvText = await FileSystem.readAsStringAsync(latestCsvFile.uri);
       }
 
-      const rows = buildRawMaterialsReportFromCsv(csvText, catalog);
+      const rows = buildFinishedProductsReportFromCsv(csvText, rawMaterials, excluded);
       setReportRows(rows);
     } catch (error: any) {
-      setReportRows(catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 })));
+      setReportRows([]);
       setReportError(`Errore lettura file CSV: ${error?.message || "errore sconosciuto"}`);
     } finally {
       setLoadingReport(false);
@@ -71,26 +74,24 @@ export default function RawMaterialsStockScreen() {
 
   useEffect(() => {
     loadReport();
-  }, [latestCsvFile?.id, products]);
+  }, [latestCsvFile?.id, rawMaterialsProducts, excludedProducts]);
 
   const handleDownloadPdf = async () => {
     try {
       setExporting(true);
-      const catalog = Array.isArray(products) ? products : [];
 
       if (Platform.OS === "web") {
-        /* expo-print su web chiama solo window.print() e ignora l'HTML: PDF dai dati con jsPDF */
-        downloadRawMaterialsReportPdfWeb(reportRows, catalog);
+        downloadFinishedProductsReportPdfWeb(reportRows);
         return;
       }
 
-      const html = buildReportPdfHtml(reportRows, catalog);
+      const html = buildReportPdfHtml(reportRows);
       const file = await Print.printToFileAsync({ html });
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
           mimeType: "application/pdf",
-          dialogTitle: "Scarica report giacenza materie prime",
+          dialogTitle: "Scarica report giacenza prodotti finiti",
         });
       } else {
         Alert.alert("PDF creato", `File salvato in: ${file.uri}`);
@@ -107,25 +108,25 @@ export default function RawMaterialsStockScreen() {
       <View style={styles.container}>
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <FileBarChart size={20} color={colors.primary} />
-            <Text style={styles.title}>Giacenza Materie Prime</Text>
+            <Package size={20} color={colors.secondary} />
+            <Text style={styles.title}>Giacenza Prodotti Finiti</Text>
           </View>
           <View style={styles.actions}>
             <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={() => setProductsEditVisible(true)}
-              accessibilityLabel="Gestisci prodotti"
+              style={styles.settingsButton}
+              onPress={() => setExcludedModalVisible(true)}
+              accessibilityLabel="Gestisci prodotti esclusi"
             >
-              <Settings size={16} color={colors.primary} />
+              <Settings size={16} color={colors.secondary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.refreshButton} onPress={loadReport} disabled={loadingReport}>
               {loadingReport ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={colors.secondary} />
               ) : (
-                <RefreshCw size={16} color={colors.primary} />
+                <RefreshCw size={16} color={colors.secondary} />
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPdf} disabled={exporting || loadingReport}>
+            <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPdf} disabled={exporting || loadingReport || reportRows.length === 0}>
               {exporting ? (
                 <ActivityIndicator size="small" color={colors.card} />
               ) : (
@@ -141,14 +142,20 @@ export default function RawMaterialsStockScreen() {
         )}
         {reportError && <Text style={styles.errorText}>{reportError}</Text>}
 
+        {!reportError && reportRows.length === 0 && !loadingReport && (
+          <Text style={styles.infoText}>
+            Nessun prodotto finito trovato. Verifica che il CSV contenga prodotti diversi dalle materie prime.
+          </Text>
+        )}
+
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.tableHeader}>
-            <Text style={[styles.headerText, styles.nameColumn]}>Materia Prima</Text>
+            <Text style={[styles.headerText, styles.nameColumn]}>Prodotto</Text>
             <Text style={[styles.headerText, styles.qtyColumn]}>Quantità</Text>
           </View>
-          {reportRows.map((row) => (
-            <View key={row.nome_materia_prima} style={styles.row}>
-              <Text style={[styles.rowName, styles.nameColumn]}>{row.nome_materia_prima}</Text>
+          {reportRows.map((row, index) => (
+            <View key={`${row.nome_prodotto}-${index}`} style={styles.row}>
+              <Text style={[styles.rowName, styles.nameColumn]}>{row.nome_prodotto}</Text>
               <Text style={[styles.rowQty, styles.qtyColumn, row.giacenza_bancali === 0 && styles.rowQtyZero]}>
                 {row.giacenza_bancali}
               </Text>
@@ -165,10 +172,10 @@ export default function RawMaterialsStockScreen() {
           )}
         </ScrollView>
 
-        <RawMaterialsProductsEditModal
-          visible={productsEditVisible}
+        <FinishedProductsExcludedModal
+          visible={excludedModalVisible}
           onClose={() => {
-            setProductsEditVisible(false);
+            setExcludedModalVisible(false);
             loadReport();
           }}
         />
@@ -202,7 +209,7 @@ const styles = StyleSheet.create({
   downloadButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -213,12 +220,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  settingsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
+  },
   refreshButton: {
     width: 36,
     height: 36,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.secondary,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.card,
@@ -240,6 +257,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.warning,
     marginBottom: 10,
+  },
+  infoText: {
+    fontSize: 13,
+    color: colors.darkGray,
+    marginBottom: 10,
+    fontStyle: "italic",
   },
   scrollContent: {
     paddingBottom: 20,
@@ -288,7 +311,7 @@ const styles = StyleSheet.create({
   rowQty: {
     fontSize: 14,
     fontWeight: "700",
-    color: colors.primary,
+    color: colors.secondary,
   },
   rowQtyZero: {
     color: colors.darkGray,
@@ -297,7 +320,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 14,

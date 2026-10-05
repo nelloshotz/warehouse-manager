@@ -1,4 +1,4 @@
-import type { RawMaterialRow } from "@/utils/rawMaterialsReport";
+import type { FinishedProductRow } from "@/utils/finishedProductsReport";
 
 function escapeHtml(value: string): string {
   return String(value)
@@ -21,24 +21,17 @@ export function formatTotaleForPdf(value: number): string {
   return Math.round(n).toLocaleString("it-IT");
 }
 
-/** Righe PDF: se lo stato non è ancora popolato, tutto il catalogo a giacenza 0. */
-export function rowsForPdf(rows: RawMaterialRow[], catalog: string[]): RawMaterialRow[] {
-  if (rows.length > 0) return rows;
-  return catalog.map((nome) => ({ nome_materia_prima: nome, giacenza_bancali: 0 }));
-}
-
 /**
  * HTML per expo-print (iOS/Android): tabella da dati, più pagine via CSS di stampa.
  */
-export function buildReportPdfHtml(rows: RawMaterialRow[], catalog: string[]): string {
-  const data = rowsForPdf(rows, catalog);
-  const totalGiacenza = data.reduce((sum, row) => sum + row.giacenza_bancali, 0);
+export function buildReportPdfHtml(rows: FinishedProductRow[]): string {
+  const totalGiacenza = rows.reduce((sum, row) => sum + row.giacenza_bancali, 0);
   
-  const dataRows = data
+  const dataRows = rows
     .map(
       (row) => `
     <tr>
-      <td class="col-prodotto">${escapeHtml(row.nome_materia_prima)}</td>
+      <td class="col-prodotto">${escapeHtml(row.nome_prodotto)}</td>
       <td class="col-giacenza">${escapeHtml(formatGiacenzaForPdf(row.giacenza_bancali))}</td>
     </tr>`
     )
@@ -119,20 +112,20 @@ export function buildReportPdfHtml(rows: RawMaterialRow[], catalog: string[]): s
         text-align: right;
       }
       .total-row {
-        background: #3B82F6;
+        background: #F97316;
         font-weight: 700;
         color: #FFFFFF;
       }
       .total-row td {
         padding: 10px;
-        border-color: #2563EB;
+        border-color: #EA580C;
       }
     </style>
   </head>
   <body>
     <div class="doc-header">
-      <h1>Report Giacenza Materie Prime</h1>
-      <p class="subtitle">Generato il ${dataGenerazione} · ${data.length} prodotti</p>
+      <h1>Report Giacenza Prodotti Finiti</h1>
+      <p class="subtitle">Generato il ${dataGenerazione} · ${rows.length} prodotti</p>
     </div>
     <table class="report" role="table">
       <thead>
